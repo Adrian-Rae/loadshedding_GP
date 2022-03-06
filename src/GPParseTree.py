@@ -27,6 +27,17 @@ class ParseTree:
             self._value: Atom = value
             self._children: List[ParseTree.Node] = []
 
+        def eval(self):
+            # Evaluate the inner expression given the children
+
+            # If Terminal, evaluate straight
+            if self.is_terminal():
+                return self._value.eval()
+
+            # Else, TODO: evaluate all children first
+            return self._value.eval(*(child.eval() for child in self._children))
+
+
         def add_child(self, child_value: 'ParseTree.Node') -> None:
             """
             Add a node to the node's list of children.
@@ -86,7 +97,7 @@ class ParseTree:
                 rep_buffer: int = rep_chars - len(str(level))
                 prefix = str(level) + " " * rep_buffer + ": "
 
-            string_builder = prefix + "\t" * level + repr(self._value) + "\n"
+            string_builder = prefix + "\t" * level + self._value.__str__() + "\n"
             for child in self._children:
                 string_builder += child.__str__(level + 1, max_depth=max_depth)
             return string_builder
@@ -108,7 +119,7 @@ class ParseTree:
             raise InvalidDepthException
 
         # Generate a non-terminal root from one atom in the operator set
-        root_atom: Operator = random.choice(operator_set)
+        root_atom: Operator = random.choice(operator_set).instance()
         root: ParseTree.Node = ParseTree.Node(root_atom)
 
         # fill the children according to the remaining levels
@@ -140,7 +151,7 @@ class ParseTree:
 
         # for each argument/child
         for i in range(n_child):
-            child_atom = random.choice(child_atom_options)
+            child_atom = random.choice(child_atom_options).instance()
             new_child: ParseTree.Node = ParseTree.Node(child_atom)
             root.add_child(new_child)
             cls._fill_level(new_child, rem_levels - 1, terminal_set, operator_set)
@@ -157,6 +168,9 @@ class ParseTree:
             raise InvalidParseTreeGenerationException
 
         self._root = root
+
+    def eval(self):
+        return self._root.eval()
 
     def get_depth(self):
         """
