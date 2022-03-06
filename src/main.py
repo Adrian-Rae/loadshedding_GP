@@ -37,7 +37,7 @@ def main():
 
     # Do things with the population
     for i, k in enumerate(population):
-        print("Tree {}: {}".format(i, k.eval_str()))
+        print("Tree {}: {}".format(i, k.eval(symbolic=True)))
 
 
 if __name__ == '__main__':

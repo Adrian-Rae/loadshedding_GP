@@ -178,11 +178,10 @@ class ParseTree:
 
         self._root = root
 
-    def eval(self):
+    def eval(self, symbolic: bool = False):
+        if symbolic:
+            return self._root.eval_str()
         return self._root.eval()
-
-    def eval_str(self) -> str:
-        return self._root.eval_str()
 
     def get_depth(self):
         """
