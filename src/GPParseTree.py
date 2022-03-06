@@ -34,9 +34,18 @@ class ParseTree:
             if self.is_terminal():
                 return self._value.eval()
 
-            # Else, TODO: evaluate all children first
+            # Else, evaluate all children first
             return self._value.eval(*(child.eval() for child in self._children))
 
+        def eval_str(self) -> str:
+            # Evaluate the inner expression symbolically given the children
+
+            # If Terminal, evaluate straight
+            if self.is_terminal():
+                return self._value.eval_str()
+
+            # Else, evaluate all children first
+            return self._value.eval_str(*(child.eval_str() for child in self._children))
 
         def add_child(self, child_value: 'ParseTree.Node') -> None:
             """
@@ -171,6 +180,9 @@ class ParseTree:
 
     def eval(self):
         return self._root.eval()
+
+    def eval_str(self) -> str:
+        return self._root.eval_str()
 
     def get_depth(self):
         """

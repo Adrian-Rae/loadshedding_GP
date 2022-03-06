@@ -25,10 +25,17 @@ class Atom:
         self._validate_args(*args)
         return 0
 
+    def eval_str(self, *args) -> str:
+        self._validate_args(*args)
+        return str(self)
+
     def _validate_args(self, *args):
         # Check here that number of formal and actual arguments match
         if not self.arity() == len(args):
             raise InvalidOperatorParameterBindingException(self.arity(), len(args), str(self))
+
+    def __str__(self):
+        return "<anon>()"
 
 
 class Terminal(Atom):
@@ -53,10 +60,13 @@ class Terminal(Atom):
         self._validate_args(*args)
         return 0
 
+    def __str__(self):
+        return "<anon>"
+
 
 class Variable(Terminal):
 
-    def __init__(self, name: str, value=None):
+    def __init__(self, name: str, value=0):
         self._name = name
         self._value = value
 
@@ -71,7 +81,7 @@ class Variable(Terminal):
         return self._value
 
     def __str__(self):
-        return "{}[{}]".format(self._name, self.eval())
+        return "{}".format(self._name)
 
 
 class Constant(Terminal):
@@ -105,7 +115,7 @@ class ConstantRange(Terminal):
         return Constant(instance_value)
 
     def __str__(self):
-        return "<Unbound constant variable>"
+        return "<Unbound anon>"
 
 
 class Operator(Atom):
@@ -113,7 +123,7 @@ class Operator(Atom):
     The most basic non-terminating unit of an expression. Cannot be directly evaluated without parameterization.
     """
 
-    def __init__(self, name: str, arity: int, evaluation_procedure: Callable = lambda: 0):
+    def __init__(self, name: str, arity: int, evaluation_procedure: Callable, rep: str = None):
         """
         Constructor for an operator.
 
@@ -125,6 +135,12 @@ class Operator(Atom):
         self._name = name
         self._arity = arity
         self._evaluation_procedure = evaluation_procedure
+        self._representation = rep
+
+        if rep is None:
+            self._representation = "{}({})".format(self._name, ",".join(["{}" for _ in range(arity)]))
+        else:
+            self._validate_rep(rep, arity)
 
     def arity(self) -> int:
         """
@@ -142,6 +158,15 @@ class Operator(Atom):
         self._validate_args(*args)
         return self._evaluation_procedure(*args)
 
+    def eval_str(self, *args) -> str:
+        self._validate_args(*args)
+        return self._representation.format(*args)
+
+    def _validate_rep(self, rep: str, arity: int):
+        pars: int = rep.count("{}")
+        if not pars == arity:
+            raise InvalidOperatorRepresentationBindingException(arity, pars, self._name)
+
     def __str__(self):
         return self._name
 
@@ -152,3 +177,11 @@ class InvalidOperatorParameterBindingException(Exception):
     def __init__(self, expected: int, actual: int, name: str = "<anon>"):
         super().__init__("Number of formal and actual arguments for the operator {} do not match (Expected {}, "
                          "Received {})".format(name, expected, actual))
+
+
+class InvalidOperatorRepresentationBindingException(Exception):
+    def __init__(self, expected: int, actual: int, name: str = "<anon>"):
+        super().__init__("Representation of the operator {} does not match arity (Expected {}, "
+                         "Received {})".format(name, expected, actual))
+
+
