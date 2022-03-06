@@ -1,9 +1,9 @@
 from typing import TypeVar, Generic
 
 T = TypeVar("T")
-TerminalSetType = 'list[Terminal[T]]'
-OperatorSetType = 'list[Operator[T]]'
-TotalSetType = 'list[Atom[T]]'
+TerminalSetType = 'List[Terminal[T]]'
+OperatorSetType = 'List[Operator[T]]'
+UnionSetType = 'List[Atom[T]]'
 
 
 class Atom(Generic[T]):

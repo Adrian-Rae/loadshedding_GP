@@ -1,5 +1,7 @@
 import random
 
+from typing import List
+
 from GPAtom import *
 from GPExceptions import InvalidDepthException, NodeTerminationException
 
@@ -7,15 +9,13 @@ from GPExceptions import InvalidDepthException, NodeTerminationException
 class Node(Generic[T]):
     def __init__(self, value: Atom[T]) -> None:
         self._value: Atom = value
-        self._children: list[Node] = []
-        self._depth = 1
+        self._children: List[Node] = []
 
     def add_child(self, child_value: 'Node[T]') -> None:
         if self.is_terminal():
             raise NodeTerminationException
 
         self._children.append(child_value)
-        self._depth += child_value._depth
 
     def arity(self):
         return self._value.arity()
@@ -27,10 +27,12 @@ class Node(Generic[T]):
         return self._children
 
     def get_depth(self):
-        return self._depth
+        if len(self._children) == 0:
+            return 1
+        return 1 + max([k.get_depth() for k in self._children])
 
     def __str__(self, level=0):
-        ret = "\t" * level + repr(self._value) + "\n"
+        ret = "\t" * level + repr(self._value) + str(self.get_depth()) + "\n"
         for child in self._children:
             ret += child.__str__(level + 1)
         return ret
@@ -67,7 +69,7 @@ class ParseTree(Generic[T]):
 
         # the selection set is both terminals and operators, unless there is only 1 remaining level, in which case it
         # is only terminals
-        child_atom_options: TotalSetType = terminal_set if rem_levels < 2 else terminal_set + operator_set
+        child_atom_options: UnionSetType = terminal_set if rem_levels < 2 else terminal_set + operator_set
 
         # for each argument/child
         for i in range(n_child):
