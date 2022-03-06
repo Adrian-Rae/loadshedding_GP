@@ -1,6 +1,6 @@
 import random
 from math import log, floor
-from typing import List
+from typing import List, cast
 from GPAtom import *
 
 
@@ -27,15 +27,22 @@ class ParseTree:
             self._value: Atom = value
             self._children: List[ParseTree.Node] = []
 
-        def eval(self):
+        def eval(self, **kwargs):
             # Evaluate the inner expression given the children
 
-            # If Terminal, evaluate straight
+            # If Terminal
             if self.is_terminal():
+
+                # See if it matches one of the keyword args and bind to the Variable
+                arg: str = str(self._value)
+                search = kwargs.get(arg)
+                if search is not None:
+                    cast(Variable, self._value).bind(search)
+
                 return self._value.eval()
 
             # Else, evaluate all children first
-            return self._value.eval(*(child.eval() for child in self._children))
+            return self._value.eval(*(child.eval(**kwargs) for child in self._children))
 
         def eval_str(self) -> str:
             # Evaluate the inner expression symbolically given the children
@@ -178,10 +185,10 @@ class ParseTree:
 
         self._root = root
 
-    def eval(self, symbolic: bool = False):
+    def eval(self, symbolic: bool = False, **kwargs):
         if symbolic:
             return self._root.eval_str()
-        return self._root.eval()
+        return self._root.eval(**kwargs)
 
     def get_depth(self):
         """

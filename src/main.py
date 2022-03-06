@@ -19,8 +19,8 @@ def main():
     generation_method = PopulationGenerator.Method.RAMPED
 
     # Establish terminals and Operators
-    x: Variable = Variable("x", 5)
-    y: Variable = Variable("y", 4)
+    x: Variable = Variable("x")
+    Variable("y", 4)
     alpha: ConstantRange = ConstantRange(-100, 100)
 
     mult: Operator = Operator("*", 2, lambda a, b: a * b, rep="({} * {})")
@@ -37,7 +37,7 @@ def main():
 
     # Do things with the population
     for i, k in enumerate(population):
-        print("Tree {}: {}".format(i, k.eval(symbolic=True)))
+        print("Tree {}: {} = {}".format(i, k.eval(x=5), k.eval(symbolic=True)))
 
 
 if __name__ == '__main__':
