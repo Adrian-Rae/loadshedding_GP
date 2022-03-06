@@ -28,7 +28,7 @@ def main():
 
     # Do things with the population
     for k in population:
-        print("Depth: {}".format(k.get_depth()))
+        print("Tree:\n{}".format(k))
 
 
 if __name__ == '__main__':

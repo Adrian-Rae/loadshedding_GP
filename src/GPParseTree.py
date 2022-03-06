@@ -1,4 +1,5 @@
 import random
+from math import log, floor
 from typing import List
 from GPAtom import *
 
@@ -71,16 +72,23 @@ class ParseTree:
             # Else: depth is 1 + <depth of deepest child>
             return 1 + max([k.get_depth() for k in self._children])
 
-        def __str__(self, level: int = 0) -> str:
+        def __str__(self, level: int = 0, max_depth: int = 0) -> str:
             """
             String representation of the subtree rooted at this node, based on its level in a hierarchy.
 
             :param level: (Optional) Integer level of the node in a hierarchy.
             :return: A string representation of the subtree rooted at this node, based on its level in a hierarchy.
             """
-            string_builder = "\t" * level + repr(self._value) + "\n"
+
+            prefix: str = ""
+            if max_depth > 0:
+                rep_chars: int = 1 + floor(log(max_depth, 10))
+                rep_buffer: int = rep_chars - len(str(level))
+                prefix = str(level) + " " * rep_buffer + ": "
+
+            string_builder = prefix + "\t" * level + repr(self._value) + "\n"
             for child in self._children:
-                string_builder += child.__str__(level + 1)
+                string_builder += child.__str__(level + 1, max_depth=max_depth)
             return string_builder
 
     @classmethod
@@ -164,7 +172,7 @@ class ParseTree:
 
         :return: A string representation of the subtree rooted at the Parse Tree's root.
         """
-        return str(self._root)
+        return self._root.__str__(max_depth=self._root.get_depth())
 
 
 # EXCEPTIONS
