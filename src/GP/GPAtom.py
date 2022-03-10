@@ -1,5 +1,4 @@
 import random
-import sys
 from typing import Callable
 
 

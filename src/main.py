@@ -1,11 +1,10 @@
 import math
 import random
-import sys
 from typing import List
 
-from GPAtom import Terminal, Operator, Variable, Constant, ConstantRange, Atom
-from GPPopulationGenerator import PopulationGenerator
-from src.GPParseTree import ParseTree
+from src.GP.GPAtom import Terminal, Operator, Variable, ConstantRange
+from src.GP.GPPopulationGenerator import PopulationGenerator
+from src.GP.GPParseTree import ParseTree
 
 
 def main():

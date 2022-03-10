@@ -1,5 +1,4 @@
 from enum import Enum
-from math import floor
 from GPParseTree import *
 
 
