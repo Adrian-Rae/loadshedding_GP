@@ -1,16 +1,17 @@
 import math
 import random
+from inspect import signature
 from typing import List
 
-from src.GP.GPAtom import Terminal, Operator, Variable, ConstantRange
-from src.GP.GPPopulationGenerator import PopulationGenerator
-from src.GP.GPParseTree import ParseTree
+from src.GPAtom import Terminal, Operator, Variable, ConstantRange
+from src.GPParseTree import ParseTree
+from src.GPPopulationGenerator import PopulationGenerator
 
 
 def main():
     # Establish the seed - leave commented for pure random
     seed = 1
-    random.seed(seed)
+    # random.seed(seed)
 
     # Global Properties
     population_size = 3
@@ -19,12 +20,11 @@ def main():
 
     # Establish terminals and Operators
     x: Variable = Variable("x")
-    Variable("y", 4)
     alpha: ConstantRange = ConstantRange(-100, 100)
 
-    mult: Operator = Operator("*", 2, lambda a, b: a * b, rep="({} * {})")
-    add: Operator = Operator("+", 2, lambda a, b: a + b, rep="({} + {})")
-    floor: Operator = Operator("floor", 1, lambda a: math.floor(a), rep="floor({})")
+    mult: Operator = Operator("*", lambda a, b: a * b, rep="({} * {})")
+    add: Operator = Operator("+", lambda a, b: a + b, rep="({} + {})")
+    floor: Operator = Operator("floor", lambda a: math.floor(a), rep="floor({})")
 
     # Create a terminal and operator set
     t_set: List[Terminal] = [x, alpha]

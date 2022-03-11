@@ -1,4 +1,5 @@
 import random
+from inspect import signature
 from typing import Callable
 
 
@@ -122,24 +123,24 @@ class Operator(Atom):
     The most basic non-terminating unit of an expression. Cannot be directly evaluated without parameterization.
     """
 
-    def __init__(self, name: str, arity: int, evaluation_procedure: Callable, rep: str = None):
+    def __init__(self, name: str, evaluation_procedure: Callable, rep: str = None):
         """
         Constructor for an operator.
 
         :param name: String representation of the operator
-        :param arity: The number of arguments needed to evaluate the expression defined by the use of the operator.
         :param evaluation_procedure: The resolution method used to evaluate an expression containing the operator.
         """
 
         self._name = name
-        self._arity = arity
+        self._arity = len(signature(evaluation_procedure).parameters)
+
         self._evaluation_procedure = evaluation_procedure
         self._representation = rep
 
         if rep is None:
-            self._representation = "{}({})".format(self._name, ",".join(["{}" for _ in range(arity)]))
+            self._representation = "{}({})".format(self._name, ",".join(["{}" for _ in range(self._arity)]))
         else:
-            self._validate_rep(rep, arity)
+            self._validate_rep(rep, self._arity)
 
     def arity(self) -> int:
         """
