@@ -1,0 +1,2 @@
+class FitnessFunction:
+    pass
