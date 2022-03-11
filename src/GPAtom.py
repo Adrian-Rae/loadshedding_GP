@@ -66,12 +66,15 @@ class Terminal(Atom):
 
 class Variable(Terminal):
 
-    def __init__(self, name: str, value=0):
+    def __init__(self, name: str, value=None):
         self._name = name
         self._value = value
 
     def bind(self, value):
         self._value = value
+
+    def is_bound(self):
+        return self._value is not None
 
     def instance(self):
         return self
@@ -79,6 +82,11 @@ class Variable(Terminal):
     def eval(self, *args):
         self._validate_args(*args)
         return self._value
+
+    def _validate_args(self, *args):
+        if not self.is_bound():
+            raise InvalidVariableBindingException(self._name)
+        super()._validate_args(*args)
 
     def __str__(self):
         return "{}".format(self._name)
@@ -173,6 +181,11 @@ class Operator(Atom):
 
 # EXCEPTIONS
 
+class InvalidVariableBindingException(Exception):
+    def __init__(self, name: str = "<anon>"):
+        super().__init__("The variable {} is not bound to a value. Use {}.bind(<value>)".format(name, name))
+
+
 class InvalidOperatorParameterBindingException(Exception):
     def __init__(self, expected: int, actual: int, name: str = "<anon>"):
         super().__init__("Number of formal and actual arguments for the operator {} do not match (Expected {}, "
@@ -183,5 +196,3 @@ class InvalidOperatorRepresentationBindingException(Exception):
     def __init__(self, expected: int, actual: int, name: str = "<anon>"):
         super().__init__("Representation of the operator {} does not match arity (Expected {}, "
                          "Received {})".format(name, expected, actual))
-
-

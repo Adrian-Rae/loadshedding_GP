@@ -12,9 +12,9 @@ class PopulationGenerator:
             Nested class that specifies a growth method scheme for generating a population.
         """
 
-        GROW = 1
-        FULL = 2
-        RAMPED = 3
+        GROW = 0
+        FULL = 1
+        RAMPED = 2
 
     def __init__(self, terminal_set: List[Terminal], operator_set: List[Operator]) -> None:
         """
@@ -103,7 +103,7 @@ class PopulationGenerator:
             population: List[ParseTree] = []
 
             # if subpopulations exists
-            if n_local > 1:
+            if n_local > 0:
                 # generate sub-populations of equal depth and add to population
                 for depth in depth_strata:
                     population += self.generate(n_local, depth, method=PopulationGenerator.Method.FULL)
