@@ -26,13 +26,16 @@ class Atom:
         return 0
 
     def eval_str(self, *args) -> str:
-        self._validate_args(*args)
+        self._validate_args_str(*args)
         return str(self)
 
     def _validate_args(self, *args):
         # Check here that number of formal and actual arguments match
         if not self.arity() == len(args):
             raise InvalidOperatorParameterBindingException(self.arity(), len(args), str(self))
+
+    def _validate_args_str(self, *args):
+        return self._validate_args(*args)
 
     def __str__(self):
         return "<anon>()"
@@ -87,6 +90,9 @@ class Variable(Terminal):
         if not self.is_bound():
             raise InvalidVariableBindingException(self._name)
         super()._validate_args(*args)
+
+    def _validate_args_str(self, *args):
+        return super()._validate_args(*args)
 
     def __str__(self):
         return "{}".format(self._name)

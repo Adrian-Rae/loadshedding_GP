@@ -11,13 +11,14 @@ from src.GPSelector import Selector, SelectionMethod
 
 def main():
     # Establish the seed - leave commented for pure random
-    seed = 2
+    seed = 1
     random.seed(seed)
 
     # Global Properties
-    population_size = 4
-    max_depth = 3
-    generation_method = PopulationGenerator.Method.GROW
+    population_size = 1
+    max_depth = 2
+    generation_method = PopulationGenerator.Method.FULL
+    selection_method = SelectionMethod.TOURNAMENT
 
     # Establish terminals and Operators
     x: Variable = Variable("x")
@@ -48,15 +49,23 @@ def main():
     for args, target in cases:
         fitness.bind_case(args, target)
 
-    # Do things with the population
-    for i, k in enumerate(population):
-        print("Tree {} [Fitness: {}]: {}".format(
-            i,
-            fitness.fitness(k, measure=FitnessMeasure.NORMALIZED, population=population),
-            k.eval(symbolic=True)
-        ))
+    # # Do things with the population
+    # for i, k in enumerate(population):
+    #     r = k.random_node()
+    #     print("Tree {} [Fitness: {}][Random Node: {}][Lineage of random: {}]: {}".format(
+    #         i,
+    #         fitness.fitness(k, measure=FitnessMeasure.NORMALIZED, population=population),
+    #         r.eval(symbolic=True),
+    #         k.get_node_lineage(r),
+    #         k.eval(symbolic=True)
+    #     ))
 
-    print("Winner", Selector(population, fitness).select(method=SelectionMethod.TOURNAMENT).eval(symbolic=True))
+    ind = population[0]
+    print(ind)
+    n1, n2 = ind.random_node_pair()
+    print(n1, n2)
+    ind.swap_nodes(n1, n2)
+    print(ind)
 
 
 if __name__ == '__main__':

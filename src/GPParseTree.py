@@ -1,5 +1,6 @@
+import random
 from math import log, floor
-from typing import List, cast
+from typing import List, cast, Tuple
 
 from GPAtom import *
 
@@ -27,7 +28,9 @@ class ParseTree:
             self._value: Atom = value
             self._children: List[ParseTree.Node] = []
 
-        def eval(self, **kwargs):
+        def eval(self, symbolic=False, **kwargs):
+            if symbolic:
+                return self._eval_str()
             # Evaluate the inner expression given the children
 
             # If Terminal
@@ -44,7 +47,7 @@ class ParseTree:
             # Else, evaluate all children first
             return self._value.eval(*(child.eval(**kwargs) for child in self._children))
 
-        def eval_str(self) -> str:
+        def _eval_str(self) -> str:
             # Evaluate the inner expression symbolically given the children
 
             # If Terminal, evaluate straight
@@ -52,7 +55,7 @@ class ParseTree:
                 return self._value.eval_str()
 
             # Else, evaluate all children first
-            return self._value.eval_str(*(child.eval_str() for child in self._children))
+            return self._value.eval_str(*(child._eval_str() for child in self._children))
 
         def add_child(self, child_value: 'ParseTree.Node') -> None:
             """
@@ -66,6 +69,9 @@ class ParseTree:
                 raise NodeTerminationException
 
             self._children.append(child_value)
+
+        def set_child(self, child_node: 'ParseTree.Node', index: int) -> None:
+            self._children[index] = child_node
 
         def arity(self) -> int:
             """
@@ -99,24 +105,60 @@ class ParseTree:
             # Else: depth is 1 + <depth of deepest child>
             return 1 + max([k.get_depth() for k in self._children])
 
-        def __str__(self, level: int = 0, max_depth: int = 0) -> str:
-            """
-            String representation of the subtree rooted at this node, based on its level in a hierarchy.
-
-            :param level: (Optional) Integer level of the node in a hierarchy.
-            :return: A string representation of the subtree rooted at this node, based on its level in a hierarchy.
-            """
-
-            prefix: str = ""
-            if max_depth > 0:
-                rep_chars: int = 1 + floor(log(max_depth, 10))
-                rep_buffer: int = rep_chars - len(str(level))
-                prefix = str(level) + " " * rep_buffer + ": "
-
-            string_builder = prefix + "\t" * level + self._value.__str__() + "\n"
+        def _linearize(self, exclude_first=False) -> List['ParseTree.Node']:
+            buffer = [self] if not exclude_first else []
             for child in self._children:
-                string_builder += child.__str__(level + 1, max_depth=max_depth)
-            return string_builder
+                buffer += child._linearize()
+            return buffer
+
+        def random_node(self, exclude_first=False) -> 'ParseTree.Node':
+            return random.choice(self._linearize(exclude_first=exclude_first))
+
+        def get_node_lineage(self, target: 'ParseTree.Node', parent: 'ParseTree.Node' = None):
+            # get a node, along with it's parent and child index
+            if self == target:
+                index = None
+                if parent is not None:
+                    index = parent._children.index(self)
+                return self, parent, index
+
+            for child in self._children:
+                c, p, i = child.get_node_lineage(target, parent=self)
+                if c is not None:
+                    return c, p, i
+
+            return None, None, None
+
+        def __or__(self, other):
+            # define self | other to mean independence => not descendants
+            return not ((self < other) or (other < self))
+
+        def __lt__(self, other: 'ParseTree.Node'):
+            # define self < other iff self is a descendant of other => applies transitively
+            if self == other:
+                return False
+            base = False
+            for child in other._children:
+                if self == child:
+                    return True
+                else:
+                    base = base or (self < child)
+            return base
+
+        def __gt__(self, other: 'ParseTree.Node'):
+            # define self > other iff other < self
+            return other < self
+
+        def __rshift__(self, other: 'ParseTree.Node'):
+            # define self >> other if self is added as a child to other
+            other.add_child(self)
+
+        def __lshift__(self, other: 'ParseTree.Node'):
+            # define self << other if other is added as a child to self
+            self.add_child(other)
+
+        def __str__(self) -> str:
+            return self.eval(symbolic=True)
 
     @classmethod
     def random(cls, max_depth: int, terminal_set: List[Terminal], operator_set: List[Operator]) -> 'ParseTree':
@@ -169,7 +211,7 @@ class ParseTree:
         for i in range(n_child):
             child_atom = random.choice(child_atom_options).instance()
             new_child: ParseTree.Node = ParseTree.Node(child_atom)
-            root.add_child(new_child)
+            root << new_child
             cls._fill_level(new_child, rem_levels - 1, terminal_set, operator_set)
 
     def __init__(self, key: object, root: Node) -> None:
@@ -185,10 +227,11 @@ class ParseTree:
 
         self._root = root
 
+    def get_root(self):
+        return self._root
+
     def eval(self, symbolic: bool = False, **kwargs):
-        if symbolic:
-            return self._root.eval_str()
-        return self._root.eval(**kwargs)
+        return self._root.eval(symbolic=symbolic, **kwargs)
 
     def get_depth(self):
         """
@@ -198,13 +241,50 @@ class ParseTree:
         """
         return self._root.get_depth()
 
+    def random_node(self, exclude_first=False):
+        return self._root.random_node(exclude_first=exclude_first)
+
+    def random_node_pair(self) -> Tuple[Node, Node]:
+        # returns a pair of non-descendant nodes
+        # choose one node that isn't the root, as all nodes descend from root
+        n1 = self.random_node(exclude_first=True)
+
+        # choose a second node provided they aren't dependent
+        timeout = 500
+        counter = 0
+        while counter < timeout:
+            n2 = self.random_node(exclude_first=True)
+            if n1 | n2:
+                return n1, n2
+
+        # just return root combo as they are by definition, non-descendant
+        return self._root, self._root
+
+    def get_node_lineage(self, target: Node, parent: Node = None):
+        return self._root.get_node_lineage(target, parent=parent)
+
+    def swap_nodes(self, n1: Node, n2: Node):
+        # can only swap two non-descendant nodes
+
+        # if identical, no need to do anything
+        if n1 == n2:
+            return
+
+        # find lineages of both
+        n1, p1, i1 = self.get_node_lineage(n1)
+        n2, p2, i2 = self.get_node_lineage(n2)
+
+        # disconnect existing and set to new
+        for i, p, new in [(i1, p1, n2), (i2, p2, n1)]:
+            p.set_child(new, i)
+
     def __str__(self):
         """
         A string representation of the Parse Tree.
 
         :return: A string representation of the subtree rooted at the Parse Tree's root.
         """
-        return self._root.__str__(max_depth=self._root.get_depth())
+        return self._root.__str__()
 
 
 # EXCEPTIONS

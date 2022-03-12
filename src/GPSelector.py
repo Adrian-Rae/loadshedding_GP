@@ -1,5 +1,6 @@
 import random
 from enum import Enum
+from math import ceil
 from typing import List
 
 import numpy as np
@@ -15,25 +16,25 @@ class SelectionMethod(Enum):
 
 class Selector:
 
-    def __init__(self, population: List[ParseTree], fitness: FitnessFunction) -> None:
-        self._population = population
+    def __init__(self, fitness: FitnessFunction, method: SelectionMethod = SelectionMethod.FITNESS_PROPORTIONATE) -> None:
         self._fitness = fitness
         self._method_index = [
             self._select_proportionate,
             self._select_tournament
         ]
-        self._default_proportion = 0.3
+        self._method = method
 
-    def select(self, method: SelectionMethod = SelectionMethod.FITNESS_PROPORTIONATE) -> ParseTree:
-        return self._method_index[method.value]()
+    def select(self,
+               population: List[ParseTree],
+               ) -> ParseTree:
+        return self._method_index[self._method.value](population=population)
 
-    def _select_proportionate(self, **kwargs) -> ParseTree:
-        n_pop = len(self._population)
+    def _select_proportionate(self, population: List[ParseTree], **kwargs) -> ParseTree:
         nf = [self._fitness.fitness(
             k,
             measure=FitnessMeasure.NORMALIZED,
-            population=self._population
-        ) for k in self._population]
+            population=population
+        ) for k in population]
 
         # no. of occurrences for each individual in a pool prone to rounding errors - use cumulative threshold
         # no = [n_pop * f for f in nf]
@@ -48,14 +49,24 @@ class Selector:
 
         for i in range(len(cf)):
             if r < cf[i]:
-                return self._population[i]
+                return population[i]
 
-    def _select_tournament(self, proportion: float = None) -> ParseTree:
-        proportion = self._default_proportion if proportion is None else proportion
-        nt = round(proportion * len(self._population))
-        subpopulation = random.choices(self._population, k=nt)
+    def _select_tournament(self, population: List[ParseTree], proportion: float = 0.3) -> ParseTree:
+
+        if not ((0 < proportion) and (proportion <= 1)):
+            raise InvalidTournamentProportionException
+
+        nt = ceil(proportion * len(population))
+        subpopulation = random.choices(population, k=nt)
         return subpopulation[
             np.argmax([
                 self._fitness.fitness(s, measure=FitnessMeasure.ADJUSTED)
                 for s in subpopulation
             ])]
+
+
+class InvalidTournamentProportionException(Exception):
+    def __init__(self):
+        super().__init__(
+            "An invalid tournament proportion was passed. Valid population proportions must be in the range (0,1]."
+        )
