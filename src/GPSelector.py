@@ -24,16 +24,17 @@ class Selector:
         ]
         self._method = method
 
-    def select(self,
-               population: List[ParseTree],
-               ) -> ParseTree:
+    def select(self, population: List[ParseTree]) -> ParseTree:
         return self._method_index[self._method.value](population=population)
 
     def _select_proportionate(self, population: List[ParseTree], **kwargs) -> ParseTree:
+
+        # predetermine aggregate for performance
+        self._fitness.predefine_aggregate(population)
+
         nf = [self._fitness.fitness(
             k,
             measure=FitnessMeasure.NORMALIZED,
-            population=population
         ) for k in population]
 
         # no. of occurrences for each individual in a pool prone to rounding errors - use cumulative threshold

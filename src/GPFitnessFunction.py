@@ -41,6 +41,8 @@ class FitnessFunction:
         ]
         self._fitness_max = max_fitness
         self._bound = equality_bound
+        self._aggregate_adjusted = None
+        self._aggregate_members = None
 
     def bind_case(self, args: Dict, target) -> None:
         self._fitness_cases.append((args, target))
@@ -54,8 +56,6 @@ class FitnessFunction:
         return self._aggregator(accumulator)
 
     def fitness(self, individual: ParseTree, population=None, measure: FitnessMeasure = FitnessMeasure.RAW) -> float:
-        if population is None:
-            population = [individual]
         index = measure.value
         method = self._method_index[index]
         return method(individual=individual, population=population)
@@ -71,11 +71,35 @@ class FitnessFunction:
     def _adjusted_fitness(self, individual: ParseTree, **kwargs) -> float:
         return 1 / (1 + self._standardized_fitness(individual))
 
+    def predefine_aggregate(self, population: List[ParseTree]):
+        self._aggregate_members = len(population)
+        self._aggregate_adjusted = sum([self._adjusted_fitness(p) for p in population])
+
+    def average(self, population: List[ParseTree] = None):
+        factor = self._aggregate_adjusted if population is None else sum([self._adjusted_fitness(p) for p in population])
+        if factor is None:
+            raise InvalidAggregationException
+        no_mem = self._aggregate_members if population is None else len(population)
+        if no_mem is None:
+            raise InvalidAggregationException
+        return factor / no_mem
+
     def _normalized_fitness(self, individual: ParseTree, population: List[ParseTree], **kwargs) -> float:
-        return self._adjusted_fitness(individual) / sum([self._adjusted_fitness(p) for p in population])
+        factor = self._aggregate_adjusted if population is None else sum(
+            [self._adjusted_fitness(p) for p in population])
+        if factor is None:
+            raise InvalidAggregationException
+        return self._adjusted_fitness(individual) / factor
 
     def _hits_ratio(self, individual: ParseTree, **kwargs) -> float:
         return len([
             None for args, target in self._fitness_cases
             if abs(individual.eval(**args) - target) < self._bound
         ]) / len(self._fitness_cases)
+
+
+class InvalidAggregationException(Exception):
+    def __init__(self):
+        super().__init__(
+            "No pre-existing aggregate adjusted value for this population exists. Please specify the population when "
+            "calculating the normalized fitness, or make use of the predefine_aggregate() function.")

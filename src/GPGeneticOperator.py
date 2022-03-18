@@ -1,23 +1,44 @@
-from typing import List, Tuple
+from enum import Enum
+from typing import List, Tuple, Callable
 
 from src.GPParseTree import ParseTree
 from src.GPPopulationGenerator import PopulationGenerator
 from src.GPSelector import Selector
 
 
-class GeneticOperator:
+class GeneticOperatorType(Enum):
+    REPRODUCTION = 0
+    CROSSOVER = 1
+    MUTATION = 2
+
+
+class GeneticOperatorSet:
+
+    default_set = [
+        GeneticOperatorType.REPRODUCTION,
+        GeneticOperatorType.CROSSOVER,
+        GeneticOperatorType.MUTATION
+    ]
 
     def __init__(self, selector: Selector, generator: PopulationGenerator):
         self._selector = selector
         self._generator = generator
+        self._operator_index = [
+            self.reproduce,
+            self.crossover,
+            self.mutation
+        ]
 
-    def reproduce(self, population: List[ParseTree]) -> ParseTree:
-        return self._selector.select(population).copy()
+    def operate(self, population: List[ParseTree], operator: GeneticOperatorType = GeneticOperatorType.REPRODUCTION):
+        return self._operator_index[operator.value](population)
+
+    def reproduce(self, population: List[ParseTree]) -> Tuple[ParseTree]:
+        return self._selector.select(population).copy(),
 
     def crossover(self, population: List[ParseTree], max_depth=None) -> Tuple[ParseTree, ParseTree]:
 
         # choose a threshold to generate trees under
-        timeout = 500
+        timeout = 10
         counter = 0
 
         while counter < timeout:
@@ -44,12 +65,14 @@ class GeneticOperator:
             if child1.get_depth() <= max_depth and child2.get_depth() <= max_depth:
                 return child1, child2
 
+            counter += 1
+
         # else just return two of the same tree to represent a trivial crossover
-        d1 = self.reproduce(population)
+        d1 = self.reproduce(population)[0]
         d2 = d1.copy()
         return d1, d2
 
-    def mutation(self, population: List[ParseTree], max_depth=None) -> ParseTree:
+    def mutation(self, population: List[ParseTree], max_depth=None) -> Tuple[ParseTree]:
         # get a parent, copy it to child
         parent = self._selector.select(population)
         child = parent.copy()
@@ -69,7 +92,7 @@ class GeneticOperator:
         # generate a new subtree - allow trivial trees if necessary
         new_subtree = self._generator.generate(1, subtree_max_depth, force_trivial=True)[0].get_root()
         child.replace_node(removed_subtree, new_subtree)
-        return child
+        return child,
 
     def permutation(self, population: List[ParseTree]) -> ParseTree:
         pass

@@ -266,12 +266,13 @@ class ParseTree:
         n1 = self.random_node(exclude_root=True)
 
         # choose a second node provided they aren't dependent
-        timeout = 500
+        timeout = 10
         counter = 0
         while counter < timeout:
             n2 = self.random_node(exclude_root=True)
             if n1 | n2:
                 return n1, n2
+            counter += 1
 
         # just return root combo as they are by definition, non-descendant
         return self._root, self._root
