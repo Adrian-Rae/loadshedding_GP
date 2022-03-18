@@ -1,4 +1,6 @@
 from enum import Enum
+from math import floor
+
 from GPParseTree import *
 
 
@@ -35,10 +37,11 @@ class PopulationGenerator:
         self._terminal_set = terminal_set
         self._operator_set = operator_set
 
-    def generate(self, size: int, max_depth: int, method: Method = Method.GROW) -> List[ParseTree]:
+    def generate(self, size: int, max_depth: int, method: Method = Method.GROW, force_trivial: bool=False) -> List[ParseTree]:
         """
         Method to generate a population of ParseTree individuals based on specified criteria.
 
+        :param force_trivial: flag to allow the generation of trivial trees
         :param size: The size of the initial population to be generated.
         :param max_depth: The maximum depth of an individual. For FULL and RAMPED growth methods, this is the target depth.
         :param method: (Optional) The desired generation method: GROW, FULL or RAMPED. Defaults to GROW.
@@ -53,14 +56,17 @@ class PopulationGenerator:
             raise InvalidPopulationGenerationMethodException
         if size < 1:
             raise InvalidPopulationSizeException
-        if max_depth < 2:
+        if max_depth < 2 and not force_trivial:
             raise InvalidDepthException
 
         # GROW METHOD
         if method == PopulationGenerator.Method.GROW:
 
             # Simply return n randomly generated trees with the specified maximum depth
-            return [ParseTree.random(max_depth, self._terminal_set, self._operator_set) for _ in range(size)]
+            return [
+                ParseTree.random(max_depth, self._terminal_set, self._operator_set, force_trivial=force_trivial)
+                for _ in range(size)
+            ]
 
         # FULL METHOD
         elif method == PopulationGenerator.Method.FULL:
@@ -71,7 +77,12 @@ class PopulationGenerator:
             while True:
 
                 # Create a new member
-                new_member: ParseTree = ParseTree.random(max_depth, self._terminal_set, self._operator_set)
+                new_member: ParseTree = ParseTree.random(
+                    max_depth,
+                    self._terminal_set,
+                    self._operator_set,
+                    force_trivial=force_trivial
+                )
 
                 # If the depth is desired
                 if new_member.get_depth() == max_depth:
@@ -106,14 +117,24 @@ class PopulationGenerator:
             if n_local > 0:
                 # generate sub-populations of equal depth and add to population
                 for depth in depth_strata:
-                    population += self.generate(n_local, depth, method=PopulationGenerator.Method.FULL)
+                    population += self.generate(
+                        n_local,
+                        depth,
+                        method=PopulationGenerator.Method.FULL,
+                        force_trivial=force_trivial
+                    )
 
             # get a subset of depth strata for the residue members
             residue_strata = random.sample(depth_strata, n_res)
 
             # repeat the process only for the residue strata - create only individuals each time
             for depth in residue_strata:
-                population += self.generate(1, depth, method=PopulationGenerator.Method.FULL)
+                population += self.generate(
+                    1,
+                    depth,
+                    method=PopulationGenerator.Method.FULL,
+                    force_trivial=force_trivial
+                )
 
             return population
 

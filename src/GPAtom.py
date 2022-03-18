@@ -8,6 +8,9 @@ class Atom:
     The most basic symbolic unit of an expression. Is an abstraction of a terminal or operator that can be evaluated.
     """
 
+    def __init__(self):
+        pass
+
     def arity(self) -> int:
         """
         The number of dependencies needed in order to evaluate the atomic unit. Defaults to 0 as an instance of Atom
@@ -17,6 +20,9 @@ class Atom:
         """
 
         return 0
+
+    def copy(self) -> 'Atom':
+        return Atom()
 
     def instance(self):
         return self
@@ -46,6 +52,9 @@ class Terminal(Atom):
     The most basic terminating unit of an expression. Can be directly evaluated without parameterization.
     """
 
+    def __init__(self):
+        super().__init__()
+
     def arity(self) -> int:
         """
         The number of dependencies needed in order to evaluate the Terminal. Defaults to 0 as no arguments are
@@ -55,6 +64,9 @@ class Terminal(Atom):
         """
 
         return 0
+
+    def copy(self) -> 'Terminal':
+        return Terminal()
 
     def instance(self):
         return self
@@ -70,8 +82,12 @@ class Terminal(Atom):
 class Variable(Terminal):
 
     def __init__(self, name: str, value=None):
+        super().__init__()
         self._name = name
         self._value = value
+
+    def copy(self) -> 'Variable':
+        return Variable(self._name, self._value)
 
     def bind(self, value):
         self._value = value
@@ -101,7 +117,11 @@ class Variable(Terminal):
 class Constant(Terminal):
 
     def __init__(self, value=None):
+        super().__init__()
         self._value = value
+
+    def copy(self) -> 'Constant':
+        return Constant(self._value)
 
     def eval(self, *args):
         self._validate_args(*args)
@@ -117,8 +137,12 @@ class Constant(Terminal):
 class ConstantRange(Terminal):
 
     def __init__(self, lower_bound, upper_bound):
+        super().__init__()
         self._lower = lower_bound
         self._upper = upper_bound
+
+    def copy(self) -> 'ConstantRange':
+        return ConstantRange(self._lower, self._upper)
 
     def eval(self, *args):
         self._validate_args(*args)
@@ -145,6 +169,7 @@ class Operator(Atom):
         :param evaluation_procedure: The resolution method used to evaluate an expression containing the operator.
         """
 
+        super().__init__()
         self._name = name
         self._arity = len(signature(evaluation_procedure).parameters)
 
@@ -155,6 +180,9 @@ class Operator(Atom):
             self._representation = "{}({})".format(self._name, ",".join(["{}" for _ in range(self._arity)]))
         else:
             self._validate_rep(rep, self._arity)
+
+    def copy(self) -> 'Operator':
+        return Operator(self._name, self._evaluation_procedure, self._representation)
 
     def arity(self) -> int:
         """

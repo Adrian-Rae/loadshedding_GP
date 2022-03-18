@@ -1,5 +1,3 @@
-import random
-from math import log, floor
 from typing import List, cast, Tuple
 
 from GPAtom import *
@@ -27,6 +25,12 @@ class ParseTree:
 
             self._value: Atom = value
             self._children: List[ParseTree.Node] = []
+
+        def copy(self) -> 'ParseTree.Node':
+            new_node = ParseTree.Node(self._value.copy())
+            for child in self._children:
+                new_node.add_child(child.copy())
+            return new_node
 
         def eval(self, symbolic=False, **kwargs):
             if symbolic:
@@ -129,6 +133,15 @@ class ParseTree:
 
             return None, None, None
 
+        def depth_of(self, node: 'ParseTree.Node', level: int = 1):
+            if self == node:
+                return level
+            for child in self._children:
+                cd = child.depth_of(node, level + 1)
+                if cd is not None:
+                    return cd
+            return None
+
         def __or__(self, other):
             # define self | other to mean independence => not descendants
             return not ((self < other) or (other < self))
@@ -161,10 +174,11 @@ class ParseTree:
             return self.eval(symbolic=True)
 
     @classmethod
-    def random(cls, max_depth: int, terminal_set: List[Terminal], operator_set: List[Operator]) -> 'ParseTree':
+    def random(cls, max_depth: int, terminal_set: List[Terminal], operator_set: List[Operator], force_trivial: bool = False) -> 'ParseTree':
         """
         Method which produces a random non-trivial Parse Tree based on certain criteria.
 
+        :param force_trivial: Flag to allow the generation of a trivial tree
         :param max_depth: The integer maximum depth of the tree
         :param terminal_set: The terminal set used to construct the tree.
         :param operator_set: The operator set used to construct the tree.
@@ -172,12 +186,14 @@ class ParseTree:
         :raises InvalidDepthException: if max_depth is less than 2.
         """
 
-        # A tree cannot be trivial
-        if max_depth < 2:
+        # A tree cannot be trivial if not specified
+        if max_depth < 2 and not force_trivial:
             raise InvalidDepthException
 
+        choice_set_root = operator_set if (max_depth > 1) else terminal_set
+
         # Generate a non-terminal root from one atom in the operator set
-        root_atom: Operator = random.choice(operator_set).instance()
+        root_atom: Operator = random.choice(choice_set_root).instance()
         root: ParseTree.Node = ParseTree.Node(root_atom)
 
         # fill the children according to the remaining levels
@@ -241,29 +257,42 @@ class ParseTree:
         """
         return self._root.get_depth()
 
-    def random_node(self, exclude_first=False):
-        return self._root.random_node(exclude_first=exclude_first)
+    def random_node(self, exclude_root=False):
+        return self._root.random_node(exclude_first=exclude_root)
 
-    def random_node_pair(self) -> Tuple[Node, Node]:
+    def _random_node_pair(self) -> Tuple[Node, Node]:
         # returns a pair of non-descendant nodes
         # choose one node that isn't the root, as all nodes descend from root
-        n1 = self.random_node(exclude_first=True)
+        n1 = self.random_node(exclude_root=True)
 
         # choose a second node provided they aren't dependent
         timeout = 500
         counter = 0
         while counter < timeout:
-            n2 = self.random_node(exclude_first=True)
+            n2 = self.random_node(exclude_root=True)
             if n1 | n2:
                 return n1, n2
 
         # just return root combo as they are by definition, non-descendant
         return self._root, self._root
 
-    def get_node_lineage(self, target: Node, parent: Node = None):
+    def _get_node_lineage(self, target: Node, parent: Node = None):
         return self._root.get_node_lineage(target, parent=parent)
 
-    def swap_nodes(self, n1: Node, n2: Node):
+    def replace_node(self, root: Node, replacement: Node):
+
+        # find lineage of the root
+        n, p, i = self._get_node_lineage(root)
+
+        if p is None:
+            # root is root of whole tree
+            self._root = replacement
+            return
+
+        # else adjust accordingly
+        p.set_child(replacement, i)
+
+    def _swap_nodes(self, n1: Node, n2: Node):
         # can only swap two non-descendant nodes
 
         # if identical, no need to do anything
@@ -271,12 +300,21 @@ class ParseTree:
             return
 
         # find lineages of both
-        n1, p1, i1 = self.get_node_lineage(n1)
-        n2, p2, i2 = self.get_node_lineage(n2)
+        n1, p1, i1 = self._get_node_lineage(n1)
+        n2, p2, i2 = self._get_node_lineage(n2)
 
         # disconnect existing and set to new
         for i, p, new in [(i1, p1, n2), (i2, p2, n1)]:
             p.set_child(new, i)
+
+    def swap_random_node_pair(self):
+        self._swap_nodes(*self._random_node_pair())
+
+    def copy(self) -> 'ParseTree':
+        return ParseTree(self.__create_key, self._root.copy())
+
+    def depth_of(self, node: Node):
+        return self._root.depth_of(node)
 
     def __str__(self):
         """
