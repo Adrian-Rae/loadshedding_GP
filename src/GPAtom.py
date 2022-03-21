@@ -24,6 +24,9 @@ class Atom:
     def copy(self) -> 'Atom':
         return Atom()
 
+    def is_parameterized(self) -> bool:
+        return False
+
     def instance(self):
         return self
 
@@ -94,6 +97,9 @@ class Variable(Terminal):
 
     def is_bound(self):
         return self._value is not None
+
+    def is_parameterized(self) -> bool:
+        return True
 
     def instance(self):
         return self

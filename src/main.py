@@ -1,14 +1,13 @@
 import math
-import random
 from typing import List
 
 from src.GPAtom import Terminal, Operator, Variable, ConstantRange, Constant
 from src.GPControlModel import GenerationalControlModel
 from src.GPFitnessFunction import FitnessFunction
-from src.GPGeneticOperator import GeneticOperatorSet
+from src.GPGeneticOperator import GeneticOperatorSet, GeneticOperatorType
 from src.GPParseTree import ParseTree
 from src.GPPopulationGenerator import PopulationGenerator
-from src.GPSelector import Selector, SelectionMethod
+from src.GPSelector import SelectionMethod, Selector
 
 
 def main():
@@ -28,14 +27,23 @@ def main():
 
     # Create a control model
     model: GenerationalControlModel = GenerationalControlModel(
-        population_size=60,
-        max_tree_depth=10,
+        population_size=100,
+        max_tree_depth=5,
         terminal_set=t_set,
         operator_set=o_set,
         iteration_threshold=100,
+        generation_method=PopulationGenerator.Method.FULL,
         selection_method=SelectionMethod.TOURNAMENT,
         explicit_convergence_condition=lambda max_fitness: max_fitness > 0.95,
-        seed=1
+        genetic_operators=[
+            (GeneticOperatorType.CROSSOVER, 4),
+            (GeneticOperatorType.MUTATION, 2),
+            (GeneticOperatorType.PERMUTATION, 2),
+            (GeneticOperatorType.EDITING, 2),
+            (GeneticOperatorType.INVERSION, 4),
+            (GeneticOperatorType.HOIST, 3)
+        ],
+        seed=11
     )
 
     cases = [
@@ -44,7 +52,8 @@ def main():
         ({"x": 2.5}, 5.25),
         ({"x": 3}, 8),
         ({"x": 4}, 15),
-        ({"x": 5}, 24)
+        ({"x": 5}, 24),
+        ({"x": 6}, 35)
     ]
     for args, target in cases:
         model.bind_fitness_case(target, **args)

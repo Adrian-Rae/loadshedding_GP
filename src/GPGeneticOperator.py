@@ -1,6 +1,7 @@
 from enum import Enum
 from typing import List, Tuple, Callable
 
+from src.GPAtom import Constant
 from src.GPParseTree import ParseTree
 from src.GPPopulationGenerator import PopulationGenerator
 from src.GPSelector import Selector
@@ -10,14 +11,22 @@ class GeneticOperatorType(Enum):
     REPRODUCTION = 0
     CROSSOVER = 1
     MUTATION = 2
+    PERMUTATION = 3
+    EDITING = 4
+    ENCAPSULATION = 5
+    DECIMATION = 6
+    INVERSION = 7
+    HOIST = 8
+    CREATE = 9
+    COMPRESS = 10
+    EXPAND = 11
 
 
 class GeneticOperatorSet:
-
     default_set = [
-        GeneticOperatorType.REPRODUCTION,
-        GeneticOperatorType.CROSSOVER,
-        GeneticOperatorType.MUTATION
+        (GeneticOperatorType.REPRODUCTION, 1),
+        (GeneticOperatorType.CROSSOVER, 1),
+        (GeneticOperatorType.MUTATION, 1)
     ]
 
     def __init__(self, selector: Selector, generator: PopulationGenerator):
@@ -26,7 +35,16 @@ class GeneticOperatorSet:
         self._operator_index = [
             self.reproduce,
             self.crossover,
-            self.mutation
+            self.mutation,
+            self.permutation,
+            self.editing,
+            self.encapsulation,
+            self.decimation,
+            self.inversion,
+            self.hoist,
+            self.create,
+            self.compress,
+            self.expand
         ]
 
     def operate(self, population: List[ParseTree], operator: GeneticOperatorType = GeneticOperatorType.REPRODUCTION):
@@ -94,29 +112,97 @@ class GeneticOperatorSet:
         child.replace_node(removed_subtree, new_subtree)
         return child,
 
-    def permutation(self, population: List[ParseTree]) -> ParseTree:
-        pass
+    def permutation(self, population: List[ParseTree]) -> Tuple[ParseTree]:
+        # get a parent, copy it to child
+        parent = self._selector.select(population)
+        child = parent.copy()
 
-    def editing(self, population: List[ParseTree]) -> ParseTree:
-        pass
+        # permute a functional node's children
+        child.permutation()
 
-    def encapsulation(self, population: List[ParseTree]) -> ParseTree:
-        pass
+        # return the child
+        return child,
 
-    def decimation(self, population: List[ParseTree]) -> ParseTree:
-        pass
+    def editing(self, population: List[ParseTree]) -> Tuple[ParseTree]:
+        # get a parent, copy it to child
+        parent = self._selector.select(population)
+        child = parent.copy()
 
-    def inversion(self, population: List[ParseTree]) -> ParseTree:
-        pass
+        # get a non-parameterized node
+        node = child.random_node(non_terminal=True, non_parameterized=True)
 
-    def hoist(self, population: List[ParseTree]) -> ParseTree:
-        pass
+        # check if there are reductions possible, else just reproduce
+        if node is None:
+            return child,
 
-    def create(self, population: List[ParseTree]) -> ParseTree:
-        pass
+        # replace the subtree rooted at node with a constant
+        child.replace_node(node, ParseTree.Node(Constant(node.eval())))
 
-    def compress(self, population: List[ParseTree]) -> ParseTree:
-        pass
+        return child,
 
-    def expand(self, population: List[ParseTree]) -> ParseTree:
-        pass
+    def encapsulation(self, population: List[ParseTree]) -> Tuple[ParseTree]:
+        # get a parent, copy it to child
+        parent = self._selector.select(population)
+        child = parent.copy()
+
+        # TODO: implement
+
+        return child,
+
+    def decimation(self, population: List[ParseTree]) -> Tuple[ParseTree]:
+        # get a parent, copy it to child
+        parent = self._selector.select(population)
+        child = parent.copy()
+
+        # TODO: implement
+
+        return child,
+
+    def inversion(self, population: List[ParseTree]) -> Tuple[ParseTree]:
+        # get a parent, copy it to child
+        parent = self._selector.select(population)
+        child = parent.copy()
+
+        child.swap_random_node_pair()
+
+        return child,
+
+    def hoist(self, population: List[ParseTree]) -> Tuple[ParseTree]:
+        # get a parent, copy it to child
+        parent = self._selector.select(population)
+        child = parent.copy()
+
+        # get a functional node
+        functional_node = child.random_node(non_terminal=True)
+
+        # hoist the new node
+        hoisted = ParseTree.hoist(functional_node)
+
+        return hoisted,
+
+    def create(self, population: List[ParseTree]) -> Tuple[ParseTree]:
+        # get a parent, copy it to child
+        parent = self._selector.select(population)
+        child = parent.copy()
+
+        # TODO: implement
+
+        return child,
+
+    def compress(self, population: List[ParseTree]) -> Tuple[ParseTree]:
+        # get a parent, copy it to child
+        parent = self._selector.select(population)
+        child = parent.copy()
+
+        # TODO: implement
+
+        return child,
+
+    def expand(self, population: List[ParseTree]) -> Tuple[ParseTree]:
+        # get a parent, copy it to child
+        parent = self._selector.select(population)
+        child = parent.copy()
+
+        # TODO: implement
+
+        return child,

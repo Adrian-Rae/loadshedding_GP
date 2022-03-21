@@ -1,3 +1,4 @@
+import random
 from typing import List, cast, Tuple
 
 from GPAtom import *
@@ -31,6 +32,15 @@ class ParseTree:
             for child in self._children:
                 new_node.add_child(child.copy())
             return new_node
+
+        def is_parameterized(self):
+            # returns true if the subtree nested at this node contains a variable
+            if self._value.is_parameterized():
+                return True
+            for child in self._children:
+                if child.is_parameterized():
+                    return True
+            return False
 
         def eval(self, symbolic=False, **kwargs):
             if symbolic:
@@ -77,6 +87,9 @@ class ParseTree:
         def set_child(self, child_node: 'ParseTree.Node', index: int) -> None:
             self._children[index] = child_node
 
+        def shuffle_children(self):
+            self._children = random.sample(self._children, len(self._children))
+
         def arity(self) -> int:
             """
             Defines the number of child nodes a node has. Equivalent to the number of arguments taken by the enclosed operation.
@@ -109,14 +122,26 @@ class ParseTree:
             # Else: depth is 1 + <depth of deepest child>
             return 1 + max([k.get_depth() for k in self._children])
 
-        def _linearize(self, exclude_first=False) -> List['ParseTree.Node']:
-            buffer = [self] if not exclude_first else []
+        def _linearize(self, exclude_first=False, non_terminal=False, non_parameterized=False) -> List[
+            'ParseTree.Node']:
+
+            # exclude if the exclude first option is true
+            excluded = exclude_first
+
+            # exclude if it happens to be a terminal and the non-terminal option is set to true
+            excluded |= (self.is_terminal() and non_terminal)
+
+            # exclude if it happens to be parameterized and the non-parameterized option is set to true
+            excluded |= (self.is_parameterized() and non_parameterized)
+
+            buffer = [] if excluded else [self]
             for child in self._children:
-                buffer += child._linearize()
+                buffer += child._linearize(non_terminal=non_terminal, non_parameterized=non_parameterized)
             return buffer
 
-        def random_node(self, exclude_first=False) -> 'ParseTree.Node':
-            return random.choice(self._linearize(exclude_first=exclude_first))
+        def random_node(self, exclude_first=False, non_terminal=False, non_parameterized=False) -> 'ParseTree.Node':
+            options = self._linearize(exclude_first=exclude_first, non_terminal=non_terminal, non_parameterized=non_parameterized)
+            return random.choice(options) if len(options) > 0 else None
 
         def get_node_lineage(self, target: 'ParseTree.Node', parent: 'ParseTree.Node' = None):
             # get a node, along with it's parent and child index
@@ -174,7 +199,13 @@ class ParseTree:
             return self.eval(symbolic=True)
 
     @classmethod
-    def random(cls, max_depth: int, terminal_set: List[Terminal], operator_set: List[Operator], force_trivial: bool = False) -> 'ParseTree':
+    def hoist(cls, node: Node):
+        # return a subtree rooted at this node
+        return ParseTree(cls.__create_key, node)
+
+    @classmethod
+    def random(cls, max_depth: int, terminal_set: List[Terminal], operator_set: List[Operator],
+               force_trivial: bool = False) -> 'ParseTree':
         """
         Method which produces a random non-trivial Parse Tree based on certain criteria.
 
@@ -257,8 +288,8 @@ class ParseTree:
         """
         return self._root.get_depth()
 
-    def random_node(self, exclude_root=False):
-        return self._root.random_node(exclude_first=exclude_root)
+    def random_node(self, exclude_root=False, non_terminal=False, non_parameterized=False):
+        return self._root.random_node(exclude_first=exclude_root, non_terminal=non_terminal, non_parameterized=non_parameterized)
 
     def _random_node_pair(self) -> Tuple[Node, Node]:
         # returns a pair of non-descendant nodes
@@ -310,6 +341,9 @@ class ParseTree:
 
     def swap_random_node_pair(self):
         self._swap_nodes(*self._random_node_pair())
+
+    def permutation(self):
+        self.random_node(non_terminal=True).shuffle_children()
 
     def copy(self) -> 'ParseTree':
         return ParseTree(self.__create_key, self._root.copy())

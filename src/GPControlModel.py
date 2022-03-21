@@ -28,7 +28,9 @@ class ControlModel:
             equality_threshold: float = 0.05,
             iteration_threshold: int = 500,
             explicit_convergence_condition: Callable[[float], bool] = lambda max_fitness: False,
-            genetic_operators=GeneticOperatorSet.default_set
+            genetic_operators: List[Tuple[GeneticOperatorType, int]] = None,
+            print_init: bool = True,
+            simplify_final: bool = True
     ):
         self._population_size = population_size
         self._max_tree_depth = max_tree_depth
@@ -43,11 +45,14 @@ class ControlModel:
         self._equality_threshold = equality_threshold
         self._iteration_threshold = iteration_threshold
         self._explicit_convergence_condition = explicit_convergence_condition
-        self._genetic_operators = genetic_operators
+        self._genetic_operators = []
+        self._genetic_operator_weights = []
+        self._simplify_final = simplify_final
 
         # Setup seed
-        if seed is not None:
-            random.seed(seed)
+        if seed is None:
+            seed = random.randint(0, 100)
+        random.seed(seed)
 
         # State of evolution - whether the model has begun processing
         self._iteration = 0
@@ -70,6 +75,16 @@ class ControlModel:
         self._genetic_operator_set: GeneticOperatorSet = GeneticOperatorSet(self._genetic_selection,
                                                                             self._population_generator)
 
+        # Load operators
+        if genetic_operators is not None:
+            for op, weight in genetic_operators:
+                self._genetic_operators.append(op)
+                self._genetic_operator_weights.append(weight)
+        else:
+            for op, weight in GeneticOperatorSet.default_set:
+                self._genetic_operators.append(op)
+                self._genetic_operator_weights.append(weight)
+
         # Create the initial population
         self._population: List[ParseTree] = self._population_generator.generate(
             self._population_size,
@@ -82,6 +97,22 @@ class ControlModel:
         self._optimal_member = None
         self._avg_fitness = None
 
+        # Print config
+        if print_init:
+            print(
+                "{}".format(63*"="),
+                "{:>30} | {:<30}".format("Generational Control Model", "{} iteration bound".format(self._iteration_threshold)),
+                "{:>30} | {:<30}".format("Seed", seed),
+                "{:>30} | {:<30}".format("Initial Pop. Size", self._population_size),
+                "{:>30} | {:<30}".format("Max Tree Depth", self._max_tree_depth),
+                "{:>30} | {:<30}".format("Pop. Generation Method", self._generation_method),
+                "{:>30} | {:<30}".format("Selection Method", self._selection_method),
+                "{:>30} | {:<30}".format("Equality Threshold", self._equality_threshold),
+                "{}".format(63 * "="),
+                sep="\n",
+                end="\n"
+            )
+
     def bind_fitness_case(self, target, **kwargs):
         if not self._in_progress:
             self._fitness_function.bind_case(kwargs, target)
@@ -91,7 +122,7 @@ class ControlModel:
     def next(
             self,
             action_on_evaluation: Callable[[int, ParseTree, float, float], Any] = lambda iteration, optimal_member,
-                                                                                max_fitness, avg_fitness: None,
+                                                                                         max_fitness, avg_fitness: None,
             action_on_converged: Callable[[ParseTree, int], Any] = lambda optimal_member, fitness: None
     ):
         # begin
@@ -144,12 +175,25 @@ class ControlModel:
     def optimal(self):
         return self._optimal_member
 
+    def _simplify(self):
+        # simplify the optimal member
+        identity = str(self._optimal_member)
+        while True:
+            pre_simplify = identity
+            self._optimal_member = self._genetic_operator_set.editing([self._optimal_member])[0]
+            identity = str(self._optimal_member)
+            if pre_simplify == identity:
+                break
+
     def _converged(self, action_on_converged: Callable[[ParseTree, int], Any] = lambda optimal_member, fitness: None):
         self._iteration += 1
         iterations_reached = self._iteration >= self._iteration_threshold
         explicit_convergence_achieved = self._explicit_convergence_condition(self._optimal_fitness)
         convergence_met = iterations_reached or explicit_convergence_achieved
         if convergence_met:
+            # simplify the final result
+            self._simplify()
+            # do whatever is specified
             self._on_converged(action_on_converged=action_on_converged)
         return convergence_met
 
@@ -171,7 +215,7 @@ class GenerationalControlModel(ControlModel):
         while len(new_population) < self._population_size:
 
             # Choose an operator
-            genetic_operator = random.choice(self._genetic_operators)
+            genetic_operator = random.choices(self._genetic_operators, weights=self._genetic_operator_weights, k=1)[0]
             new_subset = self._genetic_operator_set.operate(self._population, genetic_operator)
 
             for child in new_subset:
