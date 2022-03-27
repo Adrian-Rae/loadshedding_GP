@@ -14,7 +14,7 @@ class DatasetManager:
         # Simple model - just timestamp (t) and load-shedding stage (s)
         SIMPLE = "t", "s"
         # Extended to electrical production at the given time
-        EXTENDED_PRODUCTION = *SIMPLE, 'p'
+        EXTENDED = *SIMPLE, 'p'
 
     def __init__(self,
                  no_stages: int,
@@ -66,6 +66,12 @@ class DatasetManager:
         # return a reduction function normalised by the timestamps
         return lambda x: (rforward((x-avg_timetamp)/stdev_timestamp) if normalize else rforward(x))
 
+    def _get_closest_production(self, timestamp: int):
+        time_index = self._production_dataset['timestamp']
+        closest_time = min(time_index, key=lambda t: abs(t-timestamp))
+        return self._production_dataset.loc[self._production_dataset.timestamp == closest_time, "output"].tolist()[0]
+
+
     def generate_fitness_cases(self):
         cases = []
         for _, row in self._history_dataset.iterrows():
@@ -74,12 +80,20 @@ class DatasetManager:
             ts = int(row['timestamp'])
             st = int(row['stage'])
 
+            args = {"t": ts}
+            if self._mtype == DatasetManager.ModelType.EXTENDED:
+                # get the production at closest time
+                pd = self._get_closest_production(ts)
+                args["p"] = pd
+
             # stage ranges from 0 - self._no_stages, inclusive
             # for each stage, indicate truth, falseness
             for stage in range(self._no_stages):
                 # the target is truth or falseness of a time corresponding to a stage
                 target = int(st == stage)
-                new_case = ({"t": ts, "s": st}, target)
+                stage_args = args.copy()
+                stage_args["s"] = st
+                new_case = (stage_args, target)
                 cases.append(new_case)
 
         return cases

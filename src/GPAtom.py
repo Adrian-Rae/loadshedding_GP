@@ -139,6 +139,9 @@ class Variable(Terminal):
         """
         return True
 
+    def get_name(self) -> str:
+        return self._name
+
     def eval(self, *args):
         self._validate_args(*args)
         return self._value

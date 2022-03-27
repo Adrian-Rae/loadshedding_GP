@@ -169,6 +169,16 @@ class ParseTree:
                     return cd
             return None
 
+        def get_variables(self):
+            set_par = set()
+            if isinstance(self._value, Variable):
+                set_par.add(self._value.get_name())
+            for child in self._children:
+                rec_call = child.get_variables()
+                set_par = set_par.union(rec_call)
+            return list(set_par)
+
+
         def __or__(self, other):
             # define self | other to mean independence => not descendants
             return not ((self < other) or (other < self))
@@ -200,7 +210,8 @@ class ParseTree:
         def __str__(self) -> str:
             return self.eval(symbolic=True)
 
-    def _classify_single(self, x, reduction):
+    @classmethod
+    def _classify_single(cls, x, reduction):
         return reduction(x)
 
     def classify(self, reduction, range_var, key_vals=None, max_classes: int = 2):
@@ -218,8 +229,6 @@ class ParseTree:
         reduced = [self._classify_single(e, reduction) for e in evals]
         classification = np.argmax(reduced)
         return classification, reduced
-
-
 
     @classmethod
     def hoist(cls, node: Node):
@@ -391,6 +400,9 @@ class ParseTree:
         target = self.random_node(non_terminal=True)
         if target is not None:
             target.shuffle_children()
+
+    def get_variables(self):
+        return self._root.get_variables()
 
     def copy(self) -> 'ParseTree':
         return ParseTree(self.__create_key, self._root.copy())
