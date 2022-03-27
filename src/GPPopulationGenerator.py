@@ -1,3 +1,4 @@
+import threading
 from enum import Enum
 from math import floor
 
@@ -18,7 +19,7 @@ class PopulationGenerator:
         FULL = 1
         RAMPED = 2
 
-    def __init__(self, terminal_set: List[Terminal], operator_set: List[Operator]) -> None:
+    def __init__(self, terminal_set: List[Terminal], operator_set: List[Operator], parallelization: int = 1) -> None:
         """
             Constructor for the generator.
 
@@ -36,8 +37,43 @@ class PopulationGenerator:
 
         self._terminal_set = terminal_set
         self._operator_set = operator_set
+        self._parallelization = parallelization
+        self._population_buffer = []
+        self._serial_lock = threading.Lock()
+        self._generating_lock = threading.Lock()
 
-    def generate(self, size: int, max_depth: int, method: Method = Method.GROW, force_trivial: bool=False) -> List[ParseTree]:
+    def generate(self, size: int, max_depth: int, method: Method = Method.GROW, force_trivial: bool = False,
+                 force_fairness: bool = False) -> List[ParseTree]:
+
+        with self._generating_lock:
+            population_split = [sum(p) for p in np.array_split([1 for _ in range(size)], self._parallelization)]
+            threads = []
+            for sub_pop_range in population_split:
+                if sub_pop_range == 0:
+                    continue
+                args = (sub_pop_range, max_depth, method, force_trivial, force_fairness)
+                active_thread = threading.Thread(
+                    target=self._generate_serial,
+                    args=args,
+                    daemon=True
+                )
+                threads.append(active_thread)
+
+            # wait for responses
+            for thread in threads:
+                thread.start()
+                thread.join()
+
+            # get the buffer value
+            new_pop = self._population_buffer
+
+            #clear the buffer
+            self._population_buffer = []
+
+            return new_pop
+
+    def _generate_serial(self, size: int, max_depth: int, method: Method = Method.GROW, force_trivial: bool = False,
+                         force_fairness: bool = False):
         """
         Method to generate a population of ParseTree individuals based on specified criteria.
 
@@ -62,11 +98,22 @@ class PopulationGenerator:
         # GROW METHOD
         if method == PopulationGenerator.Method.GROW:
 
+            population: List[ParseTree] = []
+
             # Simply return n randomly generated trees with the specified maximum depth
-            return [
-                ParseTree.random(max_depth, self._terminal_set, self._operator_set, force_trivial=force_trivial)
-                for _ in range(size)
-            ]
+            for i in range(size):
+                new_member: ParseTree = ParseTree.random(
+                    max_depth,
+                    self._terminal_set,
+                    self._operator_set,
+                    force_trivial=force_trivial,
+                    fairness=force_fairness
+                )
+                population.append(new_member)
+
+            with self._serial_lock:
+                self._population_buffer += population
+                return
 
         # FULL METHOD
         elif method == PopulationGenerator.Method.FULL:
@@ -81,7 +128,8 @@ class PopulationGenerator:
                     max_depth,
                     self._terminal_set,
                     self._operator_set,
-                    force_trivial=force_trivial
+                    force_trivial=force_trivial,
+                    fairness=force_fairness
                 )
 
                 # If the depth is desired
@@ -94,7 +142,9 @@ class PopulationGenerator:
                     break
 
             # Return the population
-            return population
+            with self._serial_lock:
+                self._population_buffer += population
+                return
 
         # RAMPED HALF-AND-HALF
         elif method == PopulationGenerator.Method.RAMPED:
@@ -107,6 +157,12 @@ class PopulationGenerator:
             n_divisions: int = (max_depth - 1)
             n_local: int = floor(size / n_divisions)
 
+            # number to be generated with each method
+            n_half: int = floor(n_local / 2)
+
+            # residual, level-wise members
+            n_res_level: int = n_local - n_half
+
             # residue of main population : those not assigned to a strata
             n_res: int = size - n_local * n_divisions
 
@@ -115,14 +171,33 @@ class PopulationGenerator:
 
             # if subpopulations exists
             if n_local > 0:
-                # generate sub-populations of equal depth and add to population
+                # generate half the local with full for each depth strata
                 for depth in depth_strata:
-                    population += self.generate(
-                        n_local,
-                        depth,
-                        method=PopulationGenerator.Method.FULL,
-                        force_trivial=force_trivial
-                    )
+                    if n_half > 0:
+                        # generate by full method
+                        population += self.generate(
+                            n_half,
+                            depth,
+                            method=PopulationGenerator.Method.FULL,
+                            force_trivial=force_trivial
+                        )
+                        # generate by grow method
+                        population += self.generate(
+                            n_half,
+                            depth,
+                            method=PopulationGenerator.Method.GROW,
+                            force_trivial=force_trivial
+                        )
+                    if n_res_level > 0:
+                        # allocate remaining members on level randomly
+                        rem_method = random.choice([PopulationGenerator.Method.GROW, PopulationGenerator.Method.FULL])
+                        # generate by grow method
+                        population += self.generate(
+                            n_res_level,
+                            depth,
+                            method=rem_method,
+                            force_trivial=force_trivial
+                        )
 
             # get a subset of depth strata for the residue members
             residue_strata = random.sample(depth_strata, n_res)
@@ -136,7 +211,9 @@ class PopulationGenerator:
                     force_trivial=force_trivial
                 )
 
-            return population
+            with self._serial_lock:
+                self._population_buffer += population
+                return
 
         # Invalid generation method bound
         raise InvalidPopulationGenerationMethodException

@@ -1,9 +1,9 @@
-import sys
+import math
 from collections import Callable
 from enum import Enum
 from typing import Dict, List
 
-from src.GPParseTree import ParseTree
+from GPParseTree import ParseTree
 
 
 class FitnessObjective(Enum):
@@ -26,7 +26,8 @@ class FitnessFunction:
                  aggregator: Callable = lambda S: sum(S),
                  error: Callable = lambda y, t: abs(y - t),
                  max_fitness: int = 1000000,
-                 equality_bound: float = 0.05
+                 equality_bound: float = 0.05,
+                 allow_trivial: bool = False,
                  ) -> None:
         self._objective = objective
         self._fitness_cases = []
@@ -43,6 +44,7 @@ class FitnessFunction:
         self._bound = equality_bound
         self._aggregate_adjusted = None
         self._aggregate_members = None
+        self._allow_trivial = allow_trivial
 
     def bind_case(self, args: Dict, target) -> None:
         self._fitness_cases.append((args, target))
@@ -51,7 +53,11 @@ class FitnessFunction:
         accumulator = []
         for args, target in self._fitness_cases:
             y = individual.eval(**args)
-            e = self._error(y=y, t=target)
+
+            # do not allow trivial expression
+            is_trivial = (not individual.get_root().is_parameterized()) and not self._allow_trivial
+
+            e = self._error(y, target) + ( (self._fitness_max if self._objective is FitnessObjective.MINIMISE else -self._fitness_max) if is_trivial else 0)
             accumulator.append(e)
         return self._aggregator(accumulator)
 
@@ -76,7 +82,8 @@ class FitnessFunction:
         self._aggregate_adjusted = sum([self._adjusted_fitness(p) for p in population])
 
     def average(self, population: List[ParseTree] = None):
-        factor = self._aggregate_adjusted if population is None else sum([self._adjusted_fitness(p) for p in population])
+        factor = self._aggregate_adjusted if population is None else sum(
+            [self._adjusted_fitness(p) for p in population])
         if factor is None:
             raise InvalidAggregationException
         no_mem = self._aggregate_members if population is None else len(population)
@@ -94,7 +101,8 @@ class FitnessFunction:
     def _hits_ratio(self, individual: ParseTree, **kwargs) -> float:
         return len([
             None for args, target in self._fitness_cases
-            if abs(individual.eval(**args) - target) < self._bound
+            # if abs(individual.eval(**args) - target) < self._bound
+            if math.isclose(individual.eval(**args), target, rel_tol=self._bound)
         ]) / len(self._fitness_cases)
 
 

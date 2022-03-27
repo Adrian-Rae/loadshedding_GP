@@ -5,8 +5,8 @@ from typing import List
 
 import numpy as np
 
-from src.GPFitnessFunction import FitnessFunction, FitnessMeasure
-from src.GPParseTree import ParseTree
+from GPFitnessFunction import FitnessFunction, FitnessMeasure
+from GPParseTree import ParseTree
 
 
 class SelectionMethod(Enum):
@@ -16,16 +16,17 @@ class SelectionMethod(Enum):
 
 class Selector:
 
-    def __init__(self, fitness: FitnessFunction, method: SelectionMethod = SelectionMethod.FITNESS_PROPORTIONATE) -> None:
+    def __init__(self, fitness: FitnessFunction, method: SelectionMethod = SelectionMethod.FITNESS_PROPORTIONATE, proportion: float = 0.3) -> None:
         self._fitness = fitness
         self._method_index = [
             self._select_proportionate,
             self._select_tournament
         ]
         self._method = method
+        self._proportion = proportion
 
     def select(self, population: List[ParseTree]) -> ParseTree:
-        return self._method_index[self._method.value](population=population)
+        return self._method_index[self._method.value](population=population, proportion=self._proportion)
 
     def _select_proportionate(self, population: List[ParseTree], **kwargs) -> ParseTree:
 

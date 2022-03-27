@@ -1,10 +1,10 @@
 from enum import Enum
-from typing import List, Tuple, Callable
+from typing import List, Tuple
 
-from src.GPAtom import Constant
-from src.GPParseTree import ParseTree
-from src.GPPopulationGenerator import PopulationGenerator
-from src.GPSelector import Selector
+from GPAtom import Constant
+from GPParseTree import ParseTree
+from GPPopulationGenerator import PopulationGenerator
+from GPSelector import Selector
 
 
 class GeneticOperatorType(Enum):
@@ -96,7 +96,7 @@ class GeneticOperatorSet:
         child = parent.copy()
 
         # get a random subtree
-        removed_subtree = child.random_node(exclude_root=True)
+        removed_subtree = child.random_node()
 
         # the max depth is either specified, or treated as the current child max depth
         max_depth = child.get_depth() if max_depth is None else max_depth
@@ -108,7 +108,8 @@ class GeneticOperatorSet:
         subtree_max_depth = max_depth - node_depth + 1
 
         # generate a new subtree - allow trivial trees if necessary
-        new_subtree = self._generator.generate(1, subtree_max_depth, force_trivial=True)[0].get_root()
+        trivial = True if subtree_max_depth < 2 else False
+        new_subtree = self._generator.generate(1, subtree_max_depth, force_trivial=trivial)[0].get_root()
         child.replace_node(removed_subtree, new_subtree)
         return child,
 
@@ -176,7 +177,7 @@ class GeneticOperatorSet:
         functional_node = child.random_node(non_terminal=True)
 
         # hoist the new node
-        hoisted = ParseTree.hoist(functional_node)
+        hoisted = ParseTree.hoist(functional_node) if functional_node is not None else child
 
         return hoisted,
 

@@ -1,5 +1,6 @@
-import random
 from typing import List, cast, Tuple
+
+import numpy as np
 
 from GPAtom import *
 
@@ -140,7 +141,8 @@ class ParseTree:
             return buffer
 
         def random_node(self, exclude_first=False, non_terminal=False, non_parameterized=False) -> 'ParseTree.Node':
-            options = self._linearize(exclude_first=exclude_first, non_terminal=non_terminal, non_parameterized=non_parameterized)
+            options = self._linearize(exclude_first=exclude_first, non_terminal=non_terminal,
+                                      non_parameterized=non_parameterized)
             return random.choice(options) if len(options) > 0 else None
 
         def get_node_lineage(self, target: 'ParseTree.Node', parent: 'ParseTree.Node' = None):
@@ -198,6 +200,27 @@ class ParseTree:
         def __str__(self) -> str:
             return self.eval(symbolic=True)
 
+    def _classify_single(self, x, reduction):
+        return reduction(x)
+
+    def classify(self, reduction, range_var, key_vals=None, max_classes: int = 2):
+        key_vals = key_vals if key_vals is not None else []
+        class_range = range(max_classes)
+        function_args = {}
+        for variable_name, variable_value in key_vals:
+            function_args[variable_name] = variable_value
+        evals = []
+        for cl in class_range:
+            args = function_args.copy()
+            args[range_var] = cl
+            evaluation = self.eval(**args)
+            evals.append(evaluation)
+        reduced = [self._classify_single(e, reduction) for e in evals]
+        classification = np.argmax(reduced)
+        return classification, reduced
+
+
+
     @classmethod
     def hoist(cls, node: Node):
         # return a subtree rooted at this node
@@ -205,7 +228,7 @@ class ParseTree:
 
     @classmethod
     def random(cls, max_depth: int, terminal_set: List[Terminal], operator_set: List[Operator],
-               force_trivial: bool = False) -> 'ParseTree':
+               force_trivial: bool = False, fairness: bool = False) -> 'ParseTree':
         """
         Method which produces a random non-trivial Parse Tree based on certain criteria.
 
@@ -228,13 +251,13 @@ class ParseTree:
         root: ParseTree.Node = ParseTree.Node(root_atom)
 
         # fill the children according to the remaining levels
-        cls._fill_level(root, max_depth - 1, terminal_set, operator_set)
+        cls._fill_level(root, max_depth - 1, terminal_set, operator_set, fairness=fairness)
 
         return ParseTree(cls.__create_key, root)
 
     @classmethod
     def _fill_level(cls, root: Node, rem_levels: int, terminal_set: List[Terminal],
-                    operator_set: List[Operator]) -> None:
+                    operator_set: List[Operator], fairness: bool = False) -> None:
         """
         Helper method to fill children randomly given a specific number of levels and terminal and operator sets.
 
@@ -244,9 +267,6 @@ class ParseTree:
         :param operator_set: The operator set used to construct the child nodes.
         """
 
-        if rem_levels == 0:
-            return
-
         # the number of children for the node
         n_child: int = root.arity()
 
@@ -254,9 +274,25 @@ class ParseTree:
         # is only terminals
         child_atom_options: List[Atom] = terminal_set if rem_levels < 2 else terminal_set + operator_set
 
+        natural_weights = [1 for _ in range(len(child_atom_options))]
+        fair_weights = natural_weights \
+            if rem_levels < 2 \
+            else [len(operator_set) for _ in terminal_set] + [len(terminal_set) for _ in operator_set]
+
+        # Choose the weights based on condition
+        weights = fair_weights if fairness else natural_weights
+
+        # note on fairness conditions:
+        # suppose one establishes that the likely of choosing a terminal should match that of an operator:
+        # if the number of terminals is unequal to that of the operators, one cannot simply choose an element from a
+        # combined list as this would favour one of the Atomic types over the other. Thus, an element should be chosen
+        # the combined set with a weighting. If there are N terminals and K operators, this weighting should be K for
+        # each terminal and N for each operator
+        # T+O = [t1 t2 t3 t4 o1 o2 ] <=> W = [2 2 2 2 4 4]
+
         # for each argument/child
         for i in range(n_child):
-            child_atom = random.choice(child_atom_options).instance()
+            child_atom = random.choices(population=child_atom_options, weights=weights, k=1)[0].instance()
             new_child: ParseTree.Node = ParseTree.Node(child_atom)
             root << new_child
             cls._fill_level(new_child, rem_levels - 1, terminal_set, operator_set)
@@ -273,6 +309,13 @@ class ParseTree:
             raise InvalidParseTreeGenerationException
 
         self._root = root
+        self._configurations = None
+
+    def set_config(self, config):
+        self._configurations = config
+
+    def get_config(self):
+        return self._configurations
 
     def get_root(self):
         return self._root
@@ -289,21 +332,23 @@ class ParseTree:
         return self._root.get_depth()
 
     def random_node(self, exclude_root=False, non_terminal=False, non_parameterized=False):
-        return self._root.random_node(exclude_first=exclude_root, non_terminal=non_terminal, non_parameterized=non_parameterized)
+        return self._root.random_node(exclude_first=exclude_root, non_terminal=non_terminal,
+                                      non_parameterized=non_parameterized)
 
     def _random_node_pair(self) -> Tuple[Node, Node]:
         # returns a pair of non-descendant nodes
         # choose one node that isn't the root, as all nodes descend from root
         n1 = self.random_node(exclude_root=True)
 
-        # choose a second node provided they aren't dependent
-        timeout = 10
-        counter = 0
-        while counter < timeout:
-            n2 = self.random_node(exclude_root=True)
-            if n1 | n2:
-                return n1, n2
-            counter += 1
+        if n1 is not None:
+            # choose a second node provided they aren't dependent
+            timeout = 10
+            counter = 0
+            while counter < timeout:
+                n2 = self.random_node(exclude_root=True)
+                if n2 is not None and n1 | n2:
+                    return n1, n2
+                counter += 1
 
         # just return root combo as they are by definition, non-descendant
         return self._root, self._root
@@ -343,7 +388,9 @@ class ParseTree:
         self._swap_nodes(*self._random_node_pair())
 
     def permutation(self):
-        self.random_node(non_terminal=True).shuffle_children()
+        target = self.random_node(non_terminal=True)
+        if target is not None:
+            target.shuffle_children()
 
     def copy(self) -> 'ParseTree':
         return ParseTree(self.__create_key, self._root.copy())

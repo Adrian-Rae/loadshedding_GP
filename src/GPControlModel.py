@@ -1,17 +1,20 @@
 import random
+import threading
 from typing import List, Callable, Any, Tuple
 
+import numpy as np
 from numpy import argmax
 
-from src.GPAtom import Terminal, Operator
-from src.GPFitnessFunction import FitnessObjective, FitnessFunction, FitnessMeasure
-from src.GPGeneticOperator import GeneticOperatorSet, GeneticOperatorType
-from src.GPParseTree import ParseTree
-from src.GPPopulationGenerator import PopulationGenerator
-from src.GPSelector import SelectionMethod, Selector
+from GPAtom import Terminal, Operator
+from GPFitnessFunction import FitnessObjective, FitnessFunction, FitnessMeasure
+from GPGeneticOperator import GeneticOperatorSet, GeneticOperatorType
+from GPParseTree import ParseTree
+from GPPopulationGenerator import PopulationGenerator
+from GPSelector import SelectionMethod, Selector
 
 
 class ControlModel:
+
     def __init__(
             self,
             population_size: int,
@@ -19,18 +22,22 @@ class ControlModel:
             terminal_set: List[Terminal],
             operator_set: List[Operator],
             generation_method: PopulationGenerator.Method = PopulationGenerator.Method.GROW,
+            fair_node_selection: bool = True,
             selection_method: SelectionMethod = SelectionMethod.TOURNAMENT,
+            selection_proportion: float = 0.3,
             seed: int = None,
             fitness_objective: FitnessObjective = FitnessObjective.MINIMISE,
             error_aggregator: Callable = lambda S: sum(S),
             error_metric: Callable = lambda y, t: abs(y - t),
             maximising_max_fitness: int = 1000000,
+            allow_trivial_exp: bool = False,
             equality_threshold: float = 0.05,
-            iteration_threshold: int = 500,
+            iteration_threshold: int = 100,
             explicit_convergence_condition: Callable[[float], bool] = lambda max_fitness: False,
             genetic_operators: List[Tuple[GeneticOperatorType, int]] = None,
             print_init: bool = True,
-            simplify_final: bool = True
+            simplify_final: bool = True,
+            parallelization: int = 1
     ):
         self._population_size = population_size
         self._max_tree_depth = max_tree_depth
@@ -38,28 +45,30 @@ class ControlModel:
         self._operator_set = operator_set
         self._generation_method = generation_method
         self._selection_method = selection_method
+        self._selection_proportion = selection_proportion
         self._fitness_objective = fitness_objective
         self._error_aggregator = error_aggregator
         self._error_metric = error_metric
         self._maximising_max_fitness = maximising_max_fitness
         self._equality_threshold = equality_threshold
+        self._allow_trivial_exp = allow_trivial_exp
         self._iteration_threshold = iteration_threshold
         self._explicit_convergence_condition = explicit_convergence_condition
         self._genetic_operators = []
         self._genetic_operator_weights = []
         self._simplify_final = simplify_final
+        self._seed = seed
+        self._parallelization = parallelization
+        self._lock = threading.Lock()
 
-        # Setup seed
-        if seed is None:
-            seed = random.randint(0, 100)
-        random.seed(seed)
+        self._population_buffer = []
 
         # State of evolution - whether the model has begun processing
         self._iteration = 0
         self._in_progress = False
 
         # Setup the initial population generator
-        self._population_generator: PopulationGenerator = PopulationGenerator(self._terminal_set, self._operator_set)
+        self._population_generator: PopulationGenerator = PopulationGenerator(self._terminal_set, self._operator_set, parallelization=self._parallelization)
 
         # Setup the fitness function
         self._fitness_function: FitnessFunction = FitnessFunction(
@@ -67,11 +76,16 @@ class ControlModel:
             self._error_aggregator,
             self._error_metric,
             self._maximising_max_fitness,
-            self._equality_threshold
+            self._equality_threshold,
+            self._allow_trivial_exp
         )
 
         # Setup Selection and Genetic Operator mechanisms
-        self._genetic_selection: Selector = Selector(self._fitness_function, self._selection_method)
+        self._genetic_selection: Selector = Selector(
+            self._fitness_function,
+            self._selection_method,
+            self._selection_proportion
+        )
         self._genetic_operator_set: GeneticOperatorSet = GeneticOperatorSet(self._genetic_selection,
                                                                             self._population_generator)
 
@@ -89,7 +103,8 @@ class ControlModel:
         self._population: List[ParseTree] = self._population_generator.generate(
             self._population_size,
             self._max_tree_depth,
-            self._generation_method
+            self._generation_method,
+            force_fairness=fair_node_selection
         )
 
         # Optimal fitness
@@ -100,8 +115,9 @@ class ControlModel:
         # Print config
         if print_init:
             print(
-                "{}".format(63*"="),
-                "{:>30} | {:<30}".format("Generational Control Model", "{} iteration bound".format(self._iteration_threshold)),
+                "{}".format(63 * "="),
+                "{:>30} | {:<30}".format("Generational Control Model",
+                                         "{} iteration bound".format(self._iteration_threshold)),
                 "{:>30} | {:<30}".format("Seed", seed),
                 "{:>30} | {:<30}".format("Initial Pop. Size", self._population_size),
                 "{:>30} | {:<30}".format("Max Tree Depth", self._max_tree_depth),
@@ -112,6 +128,9 @@ class ControlModel:
                 sep="\n",
                 end="\n"
             )
+
+    def get_seed(self):
+        return self._seed
 
     def bind_fitness_case(self, target, **kwargs):
         if not self._in_progress:
@@ -210,20 +229,59 @@ class GenerationalControlModel(ControlModel):
     def _survive(self):
         super()._survive()
 
+        # shuffle the population
+        random.shuffle(self._population)
+
+        threads = []
+        # Parallelize based on factor
+        for pop_subset in np.array_split(self._population, self._parallelization):
+            operative_thread = threading.Thread(target=self._concurrent_survive, args=(pop_subset,),
+                                                daemon=True)
+            operative_thread.start()
+            threads.append(operative_thread)
+
+        # wait for threads to finish
+        for thread in threads:
+            thread.join()
+
+        # return the new population
+        self._population = self._population_buffer
+
+        # empty the buffer
+        self._population_buffer = []
+
+        # Serial Execution
+        # while len(new_population) < self._population_size:
+        #
+        #     # Choose an operator
+        #     genetic_operator = random.choices(self._genetic_operators, weights=self._genetic_operator_weights, k=1)[0]
+        #     new_subset = self._genetic_operator_set.operate(self._population, genetic_operator)
+        #
+        #     for child in new_subset:
+        #         if len(new_population) >= self._population_size:
+        #             break
+        #         new_population.append(child)
+        #
+        # self._population = new_population
+
+    def _concurrent_survive(self, sub_population):
         # while there is more to add to the next population
         new_population: List[ParseTree] = []
-        while len(new_population) < self._population_size:
+
+        while len(new_population) < len(sub_population):
 
             # Choose an operator
             genetic_operator = random.choices(self._genetic_operators, weights=self._genetic_operator_weights, k=1)[0]
-            new_subset = self._genetic_operator_set.operate(self._population, genetic_operator)
+            new_subset = self._genetic_operator_set.operate(sub_population, genetic_operator)
 
             for child in new_subset:
-                if len(new_population) >= self._population_size:
+                if len(new_population) >= len(sub_population):
                     break
                 new_population.append(child)
 
-        self._population = new_population
+        # acquire lock to write to buffer
+        with self._lock:
+            self._population_buffer += new_population
 
 
 class SteadyStateModel(ControlModel):

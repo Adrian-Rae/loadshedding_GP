@@ -1,17 +1,34 @@
+import numpy as np
 import pandas as pd
 from dateutil.parser import parse
+
+from LoadSheddingFunctions import ReductionFunction
 
 _history: str = "history"
 _production: str = "production"
 _indicators: str = "indicators"
 
 
-class Manager:
+class DatasetManager:
+    class ModelType:
+        # Simple model - just timestamp (t) and load-shedding stage (s)
+        SIMPLE = "t", "s"
+        # Extended to electrical production at the given time
+        EXTENDED_PRODUCTION = *SIMPLE, 'p'
 
-    def __init__(self, sys_argv=None) -> None:
-        self._history_dataset = self._parse_history("../dataset/south_africa_load_shedding_history.csv")
-        self._production_dataset = self._parse_production("../dataset/Total_Electricity_Production.csv")
-        self._indicators_dataset = self._parse_indicators("../dataset/world_indicators.csv")
+    def __init__(self,
+                 no_stages: int,
+                 mtype: ModelType = ModelType.SIMPLE,
+                 **args
+                 ) -> None:
+
+        self._no_stages = no_stages
+        self._mtype = mtype
+        self._tsbuffer = []
+
+        self._history_dataset = self._parse_history("../data/south_africa_load_shedding_history.csv")
+        self._production_dataset = self._parse_production("../data/Total_Electricity_Production.csv")
+        self._indicators_dataset = self._parse_indicators("../data/world_indicators.csv")
 
     def _parse_history(self, source: str):
         ds = pd.read_csv(source, sep=",")
@@ -20,6 +37,9 @@ class Manager:
         for index, row in ds.iterrows():
             created_at: str = str(row[keys[0]])
             ts = int(parse(created_at).timestamp())
+
+            self._tsbuffer.append(ts)
+
             stage = int(row[keys[1]])
             entry = {'timestamp': ts, 'stage': stage}
             temp_dataset = temp_dataset.append(entry, ignore_index=True)
@@ -38,6 +58,31 @@ class Manager:
             temp_dataset = temp_dataset.append(entry, ignore_index=True)
 
         return temp_dataset
+
+    def get_reducer(self, rtype=ReductionFunction.TANH, normalize: bool = False):
+        stdev_timestamp = np.std(self._tsbuffer)
+        avg_timetamp = np.mean(self._tsbuffer)
+        rforward, rinverse = rtype.value
+        # return a reduction function normalised by the timestamps
+        return lambda x: (rforward((x-avg_timetamp)/stdev_timestamp) if normalize else rforward(x))
+
+    def generate_fitness_cases(self):
+        cases = []
+        for _, row in self._history_dataset.iterrows():
+
+            # get the time and stage
+            ts = int(row['timestamp'])
+            st = int(row['stage'])
+
+            # stage ranges from 0 - self._no_stages, inclusive
+            # for each stage, indicate truth, falseness
+            for stage in range(self._no_stages):
+                # the target is truth or falseness of a time corresponding to a stage
+                target = int(st == stage)
+                new_case = ({"t": ts, "s": st}, target)
+                cases.append(new_case)
+
+        return cases
 
     def _parse_indicators(self, source: str):
         empty_value = ".."
