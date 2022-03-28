@@ -28,7 +28,7 @@ def main(seed):
     number_nested_expressions = 15
 
     # Number of iterations to bound iterative refinement
-    number_max_iterations = 50
+    number_max_iterations = 20
 
     # Parallelization
     number_concurrent_threads = 5
@@ -174,6 +174,7 @@ def main(seed):
 
     # evaluate the individual using the test set
     test_accuracy = control_model.evaluate_test_set(fitness_cases_testing, winner)
+    print("{:>30} | {:<30}".format("Training Set Accuracy", train_accuracy))
     print("{:>30} | {:<30}".format("Testing Set Accuracy", test_accuracy))
 
     with open(SAVE_SRC, "a") as f:
@@ -181,8 +182,9 @@ def main(seed):
 
 
 if __name__ == '__main__':
-    with open(SAVE_SRC, "w"):
-        pass
-    for in_seed in range(2):
+    print("THIS OPERATION IS THREADED WITH DAEMON PROCESSES: DO NOT ATTEMPT A KEYBOARD INTERRUPT.")
+    # with open(SAVE_SRC, "w"):
+    #     pass
+    for in_seed in range(2,11):
         print("STARTING SEED {}".format(in_seed))
         main(in_seed)
