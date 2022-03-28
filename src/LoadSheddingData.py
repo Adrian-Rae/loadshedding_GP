@@ -1,16 +1,45 @@
+import math
+import random
+from enum import Enum
+
 import numpy as np
 import pandas as pd
 from dateutil.parser import parse
 
-from LoadSheddingFunctions import ReductionFunction
+from GPAtom import Variable
 
 _history: str = "history"
 _production: str = "production"
 _indicators: str = "indicators"
 
 
+class ReductionFunction(Enum):
+    class _Maps:
+        def sigmoid(x: float) -> float:
+            return 1 / (1 + math.exp(-x))
+
+        def sigmoid_inv(x: float) -> float:
+            return math.log(x) - math.log(1 - x)
+
+        def unit_arctan(x: float) -> float:
+            return 2 * math.atan(x) / math.pi
+
+        def unit_tan(x: float) -> float:
+            return math.tan(math.pi * x / 2)
+
+        def unit_tanh(x: float) -> float:
+            return (1 + math.tanh(x)) / 2
+
+        def unit_arctanh(x: float) -> float:
+            return math.atanh(2 * x - 1)
+
+    SIGMOID = (_Maps.sigmoid, _Maps.sigmoid_inv)
+    ARCTAN = (_Maps.unit_arctan, _Maps.unit_tan)
+    TANH = (_Maps.unit_tanh, _Maps.unit_arctanh)
+
+
 class DatasetManager:
-    class ModelType:
+    class ModelType(Enum):
         # Simple model - just timestamp (t) and load-shedding stage (s)
         SIMPLE = "t", "s"
         # Extended to electrical production at the given time
@@ -64,37 +93,74 @@ class DatasetManager:
         avg_timetamp = np.mean(self._tsbuffer)
         rforward, rinverse = rtype.value
         # return a reduction function normalised by the timestamps
-        return lambda x: (rforward((x-avg_timetamp)/stdev_timestamp) if normalize else rforward(x))
+        return lambda x: (rforward((x - avg_timetamp) / stdev_timestamp) if normalize else rforward(x))
 
     def _get_closest_production(self, timestamp: int):
         time_index = self._production_dataset['timestamp']
-        closest_time = min(time_index, key=lambda t: abs(t-timestamp))
+        closest_time = min(time_index, key=lambda t: abs(t - timestamp))
         return self._production_dataset.loc[self._production_dataset.timestamp == closest_time, "output"].tolist()[0]
 
+    def generate_variables(self):
+        return [Variable(k) for k in self._mtype.value]
 
-    def generate_fitness_cases(self):
+    def generate_fitness_cases(self, insertion_factor: int = 0):
         cases = []
+        prev = None
         for _, row in self._history_dataset.iterrows():
 
             # get the time and stage
             ts = int(row['timestamp'])
             st = int(row['stage'])
 
-            args = {"t": ts}
+            # if the dataset must be flattened
+            if insertion_factor > 0 and prev is not None:
+                # get the timestamps between the prev and now
+                oldts = prev['t']
+                tsrange = ts - oldts
+                interval = tsrange // (1 + insertion_factor)
+                for i in range(insertion_factor):
+                    targetts = int(oldts + (i+1) * interval)
+                    prev['t'] = targetts
+                    prev['attributes'] = 'synthesised'
+
+                    # stage ranges from 0 - self._no_stages, inclusive
+                    # for a random stage that is not the actual stage, indicate falseness
+                    non_stages = list(k for k in range(self._no_stages))
+                    non_stages.remove(st)
+                    nonstage = random.choice(non_stages)
+                    false_args = prev.copy()
+                    false_args["s"] = nonstage
+
+                    truth_case = (prev, 1)
+                    false_case = (false_args, 0)
+
+                    cases.append(truth_case)
+                    cases.append(false_case)
+
+            args = {"t": ts, "s": st, "attributes": None}
             if self._mtype == DatasetManager.ModelType.EXTENDED:
                 # get the production at closest time
                 pd = self._get_closest_production(ts)
                 args["p"] = pd
 
+            prev = args.copy()
+
             # stage ranges from 0 - self._no_stages, inclusive
-            # for each stage, indicate truth, falseness
-            for stage in range(self._no_stages):
-                # the target is truth or falseness of a time corresponding to a stage
-                target = int(st == stage)
-                stage_args = args.copy()
-                stage_args["s"] = st
-                new_case = (stage_args, target)
-                cases.append(new_case)
+            # for a random stage that is not the actual stage, indicate falseness
+            non_stages = list(k for k in range(self._no_stages))
+            non_stages.remove(st)
+            nonstage = random.choice(non_stages)
+            false_args = args.copy()
+            false_args["s"] = nonstage
+
+            truth_case = (args, 1)
+            false_case = (false_args, 0)
+
+            cases.append(truth_case)
+            cases.append(false_case)
+
+
+
 
         return cases
 

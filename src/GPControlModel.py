@@ -107,7 +107,7 @@ class ControlModel:
             force_fairness=fair_node_selection
         )
 
-        # Optimal fitness
+        # Fitness Indicators
         self._optimal_fitness = None
         self._optimal_member = None
         self._avg_fitness = None
@@ -137,6 +137,13 @@ class ControlModel:
             self._fitness_function.bind_case(kwargs, target)
         else:
             raise InvalidOperationStateException
+
+    def evaluate_test_set(self, cases, individual):
+        copied_function = self._fitness_function.copy()
+        for args, target in cases:
+            copied_function.bind_case(args, target)
+        return copied_function.fitness(individual, measure=FitnessMeasure.ADJUSTED)
+
 
     def next(
             self,
@@ -171,8 +178,14 @@ class ControlModel:
         ):
             pass
 
-        # Return the optimal member
-        return self._optimal_member, self._population
+        # Return the results of evolution
+        return {
+            "best_individual": self._optimal_member,
+            "best_fitness": self._optimal_fitness,
+            "mean_fitness": self._avg_fitness,
+            "stdev_fitness": self._fitness_function.stdev(self._population),
+            "fitness_measure": FitnessMeasure.ADJUSTED,
+        }
 
     def _evaluate(self):
 

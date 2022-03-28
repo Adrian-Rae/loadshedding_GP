@@ -1,6 +1,7 @@
 import math
 from collections import Callable
 from enum import Enum
+from statistics import stdev
 from typing import Dict, List
 
 from GPParseTree import ParseTree
@@ -49,6 +50,16 @@ class FitnessFunction:
     def bind_case(self, args: Dict, target) -> None:
         self._fitness_cases.append((args, target))
 
+    def copy(self):
+        return FitnessFunction(
+            self._objective,
+            self._aggregator,
+            self._error,
+            self._fitness_max,
+            self._bound,
+            self._allow_trivial
+        )
+
     def _eval(self, individual: ParseTree) -> float:
         accumulator = []
         for args, target in self._fitness_cases:
@@ -90,6 +101,9 @@ class FitnessFunction:
         if no_mem is None:
             raise InvalidAggregationException
         return factor / no_mem
+
+    def stdev(self, population: List[ParseTree]):
+        return stdev([self._adjusted_fitness(p) for p in population])
 
     def _normalized_fitness(self, individual: ParseTree, population: List[ParseTree], **kwargs) -> float:
         factor = self._aggregate_adjusted if population is None else sum(
