@@ -10,26 +10,25 @@ from GPPopulationGenerator import PopulationGenerator
 from GPSelector import SelectionMethod
 from LoadSheddingData import DatasetManager
 
+SAVE_SRC = "../modeldata/seed_run_data.txt"
 
-def main():
+
+def main(seed):
     # ===============================================
     # GLOBAL PARAMETERS
     # ===============================================
-
-    # Random Execution Seed
-    seed = 1
 
     # Number of LS stages, including the 0 - NULL stage
     number_load_shedding_stages = 9
 
     # Number of members to generate in the population
-    number_initial_population = 5
+    number_initial_population = 50
 
     # Max Depth of Individuals
-    number_nested_expressions = 5
+    number_nested_expressions = 15
 
     # Number of iterations to bound iterative refinement
-    number_max_iterations = 5
+    number_max_iterations = 50
 
     # Parallelization
     number_concurrent_threads = 5
@@ -109,6 +108,8 @@ def main():
     # ===============================================
 
     fitness_cases = dataset_manager.generate_fitness_cases(insertion_factor=5)
+
+    # partition into training and testing set
     random.shuffle(fitness_cases)
     half_index = len(fitness_cases) // 2
     fitness_cases_training = fitness_cases[:half_index]
@@ -169,24 +170,19 @@ def main():
 
     # Get the best individual
     winner = evolution_results.get("best_individual")
+    train_accuracy = evolution_results.get("best_fitness")
 
     # evaluate the individual using the test set
     test_accuracy = control_model.evaluate_test_set(fitness_cases_testing, winner)
     print("{:>30} | {:<30}".format("Testing Set Accuracy", test_accuracy))
 
-
-    # Manual Classfication if requried
-    # classification, rlist = winner.classify(reduction_functor, "s", [("t", 1423053934), ("p", 19736)],
-    #                                         max_classes=number_load_shedding_stages)
-    #
-    # with open('../modeldata/model-{}.pkl'.format(seed), 'xb') as persist:
-    #     winner.set_config(model_options)
-    #     dill.dump(winner, persist)
-    #
-    # with open('../modeldata/model-{}.pkl'.format(seed), 'rb') as loading:
-    #     revisited = dill.load(loading)
-    #     print("Revisited", revisited)
+    with open(SAVE_SRC, "a") as f:
+        f.write("[SEED: {}, A_TRAIN: {}, A_TEST: {}]\n".format(seed, train_accuracy, test_accuracy))
 
 
 if __name__ == '__main__':
-    main()
+    with open(SAVE_SRC, "w"):
+        pass
+    for in_seed in range(2):
+        print("STARTING SEED {}".format(in_seed))
+        main(in_seed)
