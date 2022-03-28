@@ -183,8 +183,9 @@ def main(seed):
 
 if __name__ == '__main__':
     print("THIS OPERATION IS THREADED WITH DAEMON PROCESSES: DO NOT ATTEMPT A KEYBOARD INTERRUPT.")
+    # uncomment to allow overwriting of the log buffer.
     # with open(SAVE_SRC, "w"):
     #     pass
-    for in_seed in range(2,11):
+    for in_seed in range(10):
         print("STARTING SEED {}".format(in_seed))
         main(in_seed)
